@@ -36,10 +36,10 @@ jobs:
 
 ### Inputs
 
-| Name               | Description                                            | Required | Default               |
-| ------------------ | ------------------------------------------------------ | -------- | --------------------- |
-| `github-token`     | GitHub token for API access                           | Yes      | `${{ github.token }}` |
-| `exclude-patterns` | Comma-separated list of file patterns to exclude      | No       | `''`                  |
+| Name               | Description                                      | Required | Default               |
+| ------------------ | ------------------------------------------------ | -------- | --------------------- |
+| `github-token`     | GitHub token for API access                      | Yes      | `${{ github.token }}` |
+| `exclude-patterns` | Comma-separated list of file patterns to exclude | No       | `''`                  |
 
 ### Outputs
 
