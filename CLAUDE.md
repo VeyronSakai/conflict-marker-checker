@@ -174,3 +174,4 @@ const excludeList = excludePatterns
 - Individual file failures are logged as warnings but don't stop execution
 - Only fails the action if conflict markers are actually found
 - Comprehensive error reporting with file names and line numbers
+
