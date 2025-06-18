@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a GitHub Action that automatically detects Git conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) in pull request files to prevent accidentally merging unresolved conflicts.
+This is a GitHub Action that automatically detects Git conflict markers (conflict start, separator, and end markers) in pull request files to prevent accidentally merging unresolved conflicts.
 
 ## Development Commands
 
