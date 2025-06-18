@@ -13,6 +13,10 @@ inputs:
     description: GitHub token for API access
     required: true
     default: ${{ github.token }}
+  exclude-patterns:
+    description: Comma-separated list of file patterns to exclude from checking
+    required: false
+    default: ''
 
 # Define your outputs here.
 outputs:

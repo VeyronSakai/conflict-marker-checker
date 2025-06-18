@@ -26,6 +26,7 @@ jest.unstable_mockModule('@actions/github', () => github)
 const { run } = await import('../src/main.js')
 
 describe('main.ts', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockOctokit: any
 
   beforeEach(() => {

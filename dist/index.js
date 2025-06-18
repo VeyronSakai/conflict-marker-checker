@@ -31242,6 +31242,7 @@ var githubExports = requireGithub();
 async function run() {
     try {
         const token = coreExports.getInput('github-token', { required: true });
+        const excludePatterns = coreExports.getInput('exclude-patterns') || '';
         const octokit = githubExports.getOctokit(token);
         const context = githubExports.context;
         if (!context.payload.pull_request) {
@@ -31259,9 +31260,17 @@ async function run() {
         });
         const conflictMarkers = ['<<<<<<<', '>>>>>>>', '======='];
         const filesWithConflicts = [];
+        const excludeList = excludePatterns
+            ? excludePatterns.split(',').map((p) => p.trim())
+            : [];
         for (const file of files) {
             if (file.status === 'removed')
                 continue;
+            // Skip files matching exclude patterns
+            if (excludeList.some((pattern) => file.filename.includes(pattern))) {
+                coreExports.info(`Skipping ${file.filename} (matches exclude pattern)`);
+                continue;
+            }
             try {
                 const { data: fileContent } = await octokit.rest.repos.getContent({
                     owner,

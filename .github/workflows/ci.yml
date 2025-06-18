@@ -59,6 +59,7 @@ jobs:
         uses: ./
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          exclude-patterns: 'README.md,__tests__/,src/main.ts'
 
       - name: Print Output
         id: output

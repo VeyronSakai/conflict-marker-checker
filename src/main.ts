@@ -9,6 +9,7 @@ import * as github from '@actions/github'
 export async function run(): Promise<void> {
   try {
     const token = core.getInput('github-token', { required: true })
+    const excludePatterns = core.getInput('exclude-patterns') || ''
     const octokit = github.getOctokit(token)
     const context = github.context
 
@@ -32,8 +33,18 @@ export async function run(): Promise<void> {
     const conflictMarkers = ['<<<<<<<', '>>>>>>>', '=======']
     const filesWithConflicts: string[] = []
 
+    const excludeList = excludePatterns
+      ? excludePatterns.split(',').map((p) => p.trim())
+      : []
+
     for (const file of files) {
       if (file.status === 'removed') continue
+
+      // Skip files matching exclude patterns
+      if (excludeList.some((pattern) => file.filename.includes(pattern))) {
+        core.info(`Skipping ${file.filename} (matches exclude pattern)`)
+        continue
+      }
 
       try {
         const { data: fileContent } = await octokit.rest.repos.getContent({
