@@ -32,5 +32,4 @@ autolabeler:
       - '/feature\/.+/'
 template: |
   ## Changes
-
   $CHANGES
