@@ -75,7 +75,7 @@ jobs:
         with:
           author_name: ${{ env.GITHUB_BOT_NAME }}
           author_email: ${{ env.GITHUB_BOT_EMAIL }}
-          message: "Update package.json"
+          message: 'Update package.json'
           add: ${{ env.PACKAGE_JSON_PATH }}
           new_branch: ${{ env.SOURCE_BRANCH }}
       - name: Update README.md
@@ -87,8 +87,8 @@ jobs:
         with:
           author_name: ${{ env.GITHUB_BOT_NAME }}
           author_email: ${{ env.GITHUB_BOT_EMAIL }}
-          message: "Update README.md"
-          add: "README.md"
+          message: 'Update README.md'
+          add: 'README.md'
           new_branch: ${{ env.SOURCE_BRANCH }}
       - uses: actions/create-github-app-token@v2
         id: create-github-app-token
@@ -96,7 +96,9 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: Create pull request and merge
-        if: ${{ steps.commit-package-json.outputs.committed == 'true' || steps.commit-readme.outputs.committed == 'true'}}
+        if:
+          ${{ steps.commit-package-json.outputs.committed == 'true' ||
+          steps.commit-readme.outputs.committed == 'true'}}
         env:
           GH_TOKEN: ${{ steps.create-github-app-token.outputs.token }}
         run: |
@@ -111,7 +113,11 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}
       cancel-in-progress: false
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.merged && needs.paths-filter.outputs.package_json == 'true' }}
+    if:
+      ${{ github.event_name == 'pull_request' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.merged &&
+      needs.paths-filter.outputs.package_json == 'true' }}
     env:
       VERSION: ${{ needs.update-draft.outputs.tag_name }}
     steps:
