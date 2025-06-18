@@ -1,6 +1,8 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 
+const OUTPUT_CONFLICTS = 'conflicts'
+
 /**
  * The main function for the action.
  *
@@ -87,11 +89,11 @@ export async function run(): Promise<void> {
       core.setFailed(
         `Found conflict markers in ${filesWithConflicts.length} file(s)`
       )
-      core.setOutput('has-conflicts', 'true')
+      core.setOutput(OUTPUT_CONFLICTS, 'true')
       core.setOutput('conflicted-files', filesWithConflicts.join(','))
     } else {
       core.info('No conflict markers found!')
-      core.setOutput('has-conflicts', 'false')
+      core.setOutput(OUTPUT_CONFLICTS, 'false')
       core.setOutput('conflicted-files', '')
     }
   } catch (error) {

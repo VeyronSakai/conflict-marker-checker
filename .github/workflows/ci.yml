@@ -64,5 +64,5 @@ jobs:
       - name: Print Output
         id: output
         run: |
-          echo "Has conflicts: ${{ steps.test-action.outputs.has-conflicts }}"
+          echo "Conflicts: ${{ steps.test-action.outputs.conflicts }}"
           echo "Conflicted files: ${{ steps.test-action.outputs.conflicted-files }}"
