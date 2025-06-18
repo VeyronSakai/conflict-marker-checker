@@ -26,7 +26,7 @@ jest.unstable_mockModule('@actions/github', () => github)
 const { run } = await import('../src/main.js')
 
 describe('main.ts', () => {
-  let mockOctokit: ReturnType<typeof github.getOctokit>
+  let mockOctokit: any
 
   beforeEach(() => {
     // Reset all mocks
