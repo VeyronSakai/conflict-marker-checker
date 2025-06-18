@@ -99,7 +99,7 @@ describe('main.ts', () => {
     expect(core.setFailed).toHaveBeenCalledWith(
       expect.stringContaining('Found conflict markers in 1 file(s)')
     )
-    expect(core.setOutput).toHaveBeenCalledWith('has-conflicts', 'true')
+    expect(core.setOutput).toHaveBeenCalledWith('conflicts', 'true')
     expect(core.setOutput).toHaveBeenCalledWith(
       'conflicted-files',
       expect.stringContaining('test.js')
@@ -130,7 +130,7 @@ describe('main.ts', () => {
     await run()
 
     expect(core.info).toHaveBeenCalledWith('No conflict markers found!')
-    expect(core.setOutput).toHaveBeenCalledWith('has-conflicts', 'false')
+    expect(core.setOutput).toHaveBeenCalledWith('conflicts', 'false')
     expect(core.setOutput).toHaveBeenCalledWith('conflicted-files', '')
     expect(core.setFailed).not.toHaveBeenCalled()
   })

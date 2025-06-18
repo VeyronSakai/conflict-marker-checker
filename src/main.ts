@@ -87,11 +87,11 @@ export async function run(): Promise<void> {
       core.setFailed(
         `Found conflict markers in ${filesWithConflicts.length} file(s)`
       )
-      core.setOutput('has-conflicts', 'true')
+      core.setOutput('conflicts', 'true')
       core.setOutput('conflicted-files', filesWithConflicts.join(','))
     } else {
       core.info('No conflict markers found!')
-      core.setOutput('has-conflicts', 'false')
+      core.setOutput('conflicts', 'false')
       core.setOutput('conflicted-files', '')
     }
   } catch (error) {

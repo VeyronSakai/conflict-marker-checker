@@ -43,9 +43,9 @@ jobs:
 
 ### Outputs
 
-| Name               | Description                                                                    |
-| ------------------ | ------------------------------------------------------------------------------ |
-| `has-conflicts`    | Whether conflict markers were found (true/false)                               |
+| Name               | Description                                                                  |
+| ------------------ | ---------------------------------------------------------------------------- |
+| `conflicts`        | Whether conflict markers were found (true/false)                            |
 | `conflicted-files` | Comma-separated list of files with conflicts (e.g., `file1.js:10,file2.ts:25`) |
 
 ## Example Workflow with PR Comment
@@ -78,7 +78,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Comment on PR if conflicts found
-        if: steps.conflict-check.outputs.has-conflicts == 'true'
+        if: steps.conflict-check.outputs.conflicts == 'true'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

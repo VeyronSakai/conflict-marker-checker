@@ -20,7 +20,7 @@ inputs:
 
 # Define your outputs here.
 outputs:
-  has-conflicts:
+  conflicts:
     description: Whether conflict markers were found (true/false)
   conflicted-files:
     description: Comma-separated list of files with conflicts

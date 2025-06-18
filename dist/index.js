@@ -31304,12 +31304,12 @@ async function run() {
         }
         if (filesWithConflicts.length > 0) {
             coreExports.setFailed(`Found conflict markers in ${filesWithConflicts.length} file(s)`);
-            coreExports.setOutput('has-conflicts', 'true');
+            coreExports.setOutput('conflicts', 'true');
             coreExports.setOutput('conflicted-files', filesWithConflicts.join(','));
         }
         else {
             coreExports.info('No conflict markers found!');
-            coreExports.setOutput('has-conflicts', 'false');
+            coreExports.setOutput('conflicts', 'false');
             coreExports.setOutput('conflicted-files', '');
         }
     }
