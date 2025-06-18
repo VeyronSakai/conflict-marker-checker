@@ -1,113 +1,120 @@
 name: Release
-
 on:
   pull_request:
-    types: [opened, reopened, synchronize]
-    branches:
-      - main
-  release:
-    types: [published]
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - closed
+  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
 
-jobs:
-  draft_release:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: release-drafter/release-drafter@v6
-        with:
-          config-name: release-drafter.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GITHUB_BOT_NAME: github-actions[bot]
+  GITHUB_BOT_EMAIL: github-actions[bot]@users.noreply.github.com
 
-  update_files:
+jobs:
+  update-draft:
+    name: Update Draft
+    if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main') || github.event_name == 'workflow_dispatch'}}
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    outputs:
+      tag_name: ${{ steps.release-drafter.outputs.tag_name }}
+    steps:
+      - uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5
+        id: release-drafter
+        with:
+          commitish: main
+
+  update-files:
+    name: Update Files
+    needs: update-draft
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}
+      cancel-in-progress: true
+    env:
+      VERSION: ${{ needs.update-draft.outputs.tag_name }}
+      SOURCE_BRANCH: github-actions/update-files/${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Update package.json version
+      - name: Update README.md
         run: |
-          VERSION=$(echo "${{ github.event.release.tag_name }}" | sed 's/^v//')
-          jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp
-          mv package.json.tmp package.json
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
+          cp -f .github/DRAFT_README.md README.md
+      - name: Commit README.md
+        uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5
+        id: commit-readme
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: update version to ${{ github.event.release.tag_name }}"
-          title: "chore: update version to ${{ github.event.release.tag_name }}"
-          body: |
-            This PR updates the package.json version to match the released version.
-            
-            - Updates package.json version to ${{ github.event.release.tag_name }}
-          branch: update-version-${{ github.event.release.tag_name }}
-          delete-branch: true
-
-      - name: Auto-merge Pull Request
-        run: |
-          PR_NUMBER=$(gh pr list --head update-version-${{ github.event.release.tag_name }} --json number --jq '.[0].number')
-          if [ ! -z "$PR_NUMBER" ]; then
-            gh pr merge $PR_NUMBER --auto --squash
-          fi
+          author_name: ${{ env.GITHUB_BOT_NAME }}
+          author_email: ${{ env.GITHUB_BOT_EMAIL }}
+          message: "Update README.md"
+          add: "README.md"
+          new_branch: ${{ env.SOURCE_BRANCH }}
+      - uses: actions/create-github-app-token@v2
+        id: create-github-app-token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+      - name: Create pull request and merge
+        if: ${{ steps.commit-package-json.outputs.committed == 'true' || steps.commit-readme.outputs.committed == 'true'}}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.create-github-app-token.outputs.token }}
+        run: |
+          gh pr create --title "Update files for release" --body "Update files for release" --base main --head "${SOURCE_BRANCH}"
+          gh pr merge "${SOURCE_BRANCH}" --auto --merge
 
   release:
+    name: Release
+    needs: update-draft
+    environment: Release
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
-    needs: update_files
+    concurrency:
+      group: ${{ github.workflow }}
+      cancel-in-progress: false
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.merged }}
+    env:
+      VERSION: ${{ needs.update-draft.outputs.tag_name }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run package
-
-      - name: Validate version
+          ref: main
+      - name: Validate version in package.json
         run: |
-          PACKAGE_VERSION=$(jq -r '.version' package.json)
-          RELEASE_VERSION=$(echo "${{ github.event.release.tag_name }}" | sed 's/^v//')
-          if [ "$PACKAGE_VERSION" != "$RELEASE_VERSION" ]; then
-            echo "Package version ($PACKAGE_VERSION) does not match release version ($RELEASE_VERSION)"
+          package_version=$(jq -r '.version' "${PACKAGE_JSON_PATH}")
+          if [[ "${package_version}" != "${VERSION}" ]]; then
+            echo "::error::version in package.json (${package_version}) does not match the release draft tag (${VERSION})"
             exit 1
           fi
-
-      - name: Create major and minor version tags
+      - uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5
+        id: release-drafter
+        with:
+          publish: true
+          commitish: main
+      - name: Get semver
+        id: get-semver
         run: |
-          VERSION="${{ github.event.release.tag_name }}"
-          MAJOR=$(echo $VERSION | sed 's/^v//' | cut -d. -f1)
-          MINOR=$(echo $VERSION | sed 's/^v//' | cut -d. -f1-2)
-          
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          
-          # Create or update major version tag
-          git tag -fa "v$MAJOR" -m "Release v$MAJOR"
-          git push origin "v$MAJOR" --force
-          
-          # Create or update minor version tag
-          git tag -fa "v$MINOR" -m "Release v$MINOR"
-          git push origin "v$MINOR" --force
+          read -r major minor patch <<< "$(echo "${VERSION}" | grep -oE '^([0-9]+)\.([0-9]+)\.([0-9]+)' | awk -F '.' '{print $1 " " $2 " " $3}')"
+          {
+            echo "major=${major}"
+            echo "minor=${major}.${minor}"
+            echo "patch=${major}.${minor}.${patch}"
+          } >> "${GITHUB_OUTPUT}"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.VERSION }}
+      - name: Update major tag
+        if: steps.get-semver.outputs.major != '0'
+        run: |
+          git push -f origin "refs/tags/${VERSION}:refs/tags/${{ steps.get-semver.outputs.major }}"
+      - name: Update minor tag
+        if: steps.get-semver.outputs.minor != '0.0'
+        run: |
+          git push -f origin "refs/tags/${VERSION}:refs/tags/${{ steps.get-semver.outputs.minor }}"
