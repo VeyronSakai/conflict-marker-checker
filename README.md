@@ -49,12 +49,18 @@ jobs:
 
 ## Example Workflow with PR Comment
 
+Create a workflow file in your repository (e.g., `.github/workflows/conflict-check.yml`):
+
 ```yaml
 name: Check for Conflict Markers
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
   check-conflicts:
