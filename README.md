@@ -6,9 +6,11 @@
 [![CodeQL](https://github.com/VeyronSakai/conflict-marker-checker/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/VeyronSakai/conflict-marker-checker/actions/workflows/codeql-analysis.yml)
 [![Coverage](./badges/coverage.svg)](./badges/coverage.svg)
 
-A GitHub Action that checks if pull request files contain Git conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`).
+A GitHub Action that checks if pull request files contain Git conflict markers
+(`<<<<<<<`, `=======`, `>>>>>>>`).
 
-This action helps prevent accidentally merging pull requests that contain unresolved merge conflicts.
+This action helps prevent accidentally merging pull requests that contain
+unresolved merge conflicts.
 
 ## Usage
 
@@ -34,15 +36,15 @@ jobs:
 
 ### Inputs
 
-| Name | Description | Required | Default |
-|------|-------------|----------|---------|
-| `github-token` | GitHub token for API access | Yes | `${{ github.token }}` |
+| Name           | Description                 | Required | Default               |
+| -------------- | --------------------------- | -------- | --------------------- |
+| `github-token` | GitHub token for API access | Yes      | `${{ github.token }}` |
 
 ### Outputs
 
-| Name | Description |
-|------|-------------|
-| `has-conflicts` | Whether conflict markers were found (true/false) |
+| Name               | Description                                                                    |
+| ------------------ | ------------------------------------------------------------------------------ |
+| `has-conflicts`    | Whether conflict markers were found (true/false)                               |
 | `conflicted-files` | Comma-separated list of files with conflicts (e.g., `file1.js:10,file2.ts:25`) |
 
 ## Example Workflow with PR Comment
@@ -75,7 +77,7 @@ jobs:
           script: |
             const files = '${{ steps.conflict-check.outputs.conflicted-files }}'.split(',');
             const body = `⚠️ **Conflict markers detected!**\n\nThe following files contain conflict markers:\n${files.map(f => `- ${f}`).join('\n')}\n\nPlease resolve all conflicts before merging.`;
-            
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
@@ -94,17 +96,20 @@ jobs:
 ### Setup
 
 1. Clone the repository
+
    ```bash
    git clone https://github.com/VeyronSakai/conflict-marker-checker.git
    cd conflict-marker-checker
    ```
 
 2. Install dependencies
+
    ```bash
    npm install
    ```
 
 3. Run tests
+
    ```bash
    npm test
    ```
@@ -150,4 +155,5 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
+for details.

@@ -25,7 +25,7 @@ jobs:
           script: |
             const files = '${{ steps.conflict-check.outputs.conflicted-files }}'.split(',');
             const body = `⚠️ **Conflict markers detected!**\n\nThe following files contain conflict markers:\n${files.map(f => `- ${f}`).join('\n')}\n\nPlease resolve all conflicts before merging.`;
-            
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,

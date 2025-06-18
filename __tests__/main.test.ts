@@ -26,7 +26,7 @@ jest.unstable_mockModule('@actions/github', () => github)
 const { run } = await import('../src/main.js')
 
 describe('main.ts', () => {
-  let mockOctokit: any
+  let mockOctokit: ReturnType<typeof github.getOctokit>
 
   beforeEach(() => {
     // Reset all mocks
@@ -46,7 +46,7 @@ describe('main.ts', () => {
     github.getOctokit.mockReturnValue(mockOctokit)
 
     // Set the action's inputs as return values from core.getInput().
-    core.getInput.mockImplementation(name => {
+    core.getInput.mockImplementation((name) => {
       if (name === 'github-token') return 'test-token'
       return ''
     })
@@ -78,15 +78,15 @@ describe('main.ts', () => {
 
     // Mock PR files
     mockOctokit.rest.pulls.listFiles.mockResolvedValue({
-      data: [
-        { filename: 'test.js', status: 'modified' }
-      ]
+      data: [{ filename: 'test.js', status: 'modified' }]
     })
 
     // Mock file content with conflict markers
     mockOctokit.rest.repos.getContent.mockResolvedValue({
       data: {
-        content: Buffer.from('line1\n<<<<<<< HEAD\nline2\n=======\nline3\n>>>>>>> branch\nline4').toString('base64')
+        content: Buffer.from(
+          'line1\n<<<<<<< HEAD\nline2\n=======\nline3\n>>>>>>> branch\nline4'
+        ).toString('base64')
       }
     })
 
@@ -99,7 +99,10 @@ describe('main.ts', () => {
       expect.stringContaining('Found conflict markers in 1 file(s)')
     )
     expect(core.setOutput).toHaveBeenCalledWith('has-conflicts', 'true')
-    expect(core.setOutput).toHaveBeenCalledWith('conflicted-files', expect.stringContaining('test.js'))
+    expect(core.setOutput).toHaveBeenCalledWith(
+      'conflicted-files',
+      expect.stringContaining('test.js')
+    )
   })
 
   it('Passes when no conflict markers found', async () => {
@@ -113,9 +116,7 @@ describe('main.ts', () => {
 
     // Mock PR files
     mockOctokit.rest.pulls.listFiles.mockResolvedValue({
-      data: [
-        { filename: 'test.js', status: 'modified' }
-      ]
+      data: [{ filename: 'test.js', status: 'modified' }]
     })
 
     // Mock file content without conflict markers
