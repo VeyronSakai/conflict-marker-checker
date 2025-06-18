@@ -1,0 +1,113 @@
+name: Release
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches:
+      - main
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  draft_release:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: release-drafter/release-drafter@v6
+        with:
+          config-name: release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update_files:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Update package.json version
+        run: |
+          VERSION=$(echo "${{ github.event.release.tag_name }}" | sed 's/^v//')
+          jq --arg version "$VERSION" '.version = $version' package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update version to ${{ github.event.release.tag_name }}"
+          title: "chore: update version to ${{ github.event.release.tag_name }}"
+          body: |
+            This PR updates the package.json version to match the released version.
+            
+            - Updates package.json version to ${{ github.event.release.tag_name }}
+          branch: update-version-${{ github.event.release.tag_name }}
+          delete-branch: true
+
+      - name: Auto-merge Pull Request
+        run: |
+          PR_NUMBER=$(gh pr list --head update-version-${{ github.event.release.tag_name }} --json number --jq '.[0].number')
+          if [ ! -z "$PR_NUMBER" ]; then
+            gh pr merge $PR_NUMBER --auto --squash
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    needs: update_files
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run package
+
+      - name: Validate version
+        run: |
+          PACKAGE_VERSION=$(jq -r '.version' package.json)
+          RELEASE_VERSION=$(echo "${{ github.event.release.tag_name }}" | sed 's/^v//')
+          if [ "$PACKAGE_VERSION" != "$RELEASE_VERSION" ]; then
+            echo "Package version ($PACKAGE_VERSION) does not match release version ($RELEASE_VERSION)"
+            exit 1
+          fi
+
+      - name: Create major and minor version tags
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          MAJOR=$(echo $VERSION | sed 's/^v//' | cut -d. -f1)
+          MINOR=$(echo $VERSION | sed 's/^v//' | cut -d. -f1-2)
+          
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          
+          # Create or update major version tag
+          git tag -fa "v$MAJOR" -m "Release v$MAJOR"
+          git push origin "v$MAJOR" --force
+          
+          # Create or update minor version tag
+          git tag -fa "v$MINOR" -m "Release v$MINOR"
+          git push origin "v$MINOR" --force
