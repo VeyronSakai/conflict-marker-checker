@@ -7,56 +7,164 @@
  */
 import { jest } from '@jest/globals'
 import * as core from '../__fixtures__/core.js'
-import { wait } from '../__fixtures__/wait.js'
+
+// Mock github module
+const github = {
+  context: {
+    repo: { owner: 'test-owner', repo: 'test-repo' },
+    payload: {}
+  },
+  getOctokit: jest.fn()
+}
 
 // Mocks should be declared before the module being tested is imported.
 jest.unstable_mockModule('@actions/core', () => core)
-jest.unstable_mockModule('../src/wait.js', () => ({ wait }))
+jest.unstable_mockModule('@actions/github', () => github)
 
 // The module being tested should be imported dynamically. This ensures that the
 // mocks are used in place of any actual dependencies.
 const { run } = await import('../src/main.js')
 
 describe('main.ts', () => {
-  beforeEach(() => {
-    // Set the action's inputs as return values from core.getInput().
-    core.getInput.mockImplementation(() => '500')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let mockOctokit: any
 
-    // Mock the wait function so that it does not actually wait.
-    wait.mockImplementation(() => Promise.resolve('done!'))
+  beforeEach(() => {
+    // Reset all mocks
+    jest.clearAllMocks()
+
+    // Mock octokit
+    mockOctokit = {
+      rest: {
+        pulls: {
+          listFiles: jest.fn()
+        },
+        repos: {
+          getContent: jest.fn()
+        }
+      }
+    }
+    github.getOctokit.mockReturnValue(mockOctokit)
+
+    // Set the action's inputs as return values from core.getInput().
+    core.getInput.mockImplementation((name) => {
+      if (name === 'github-token') return 'test-token'
+      return ''
+    })
   })
 
   afterEach(() => {
     jest.resetAllMocks()
   })
 
-  it('Sets the time output', async () => {
+  it('Fails when not run on a pull request', async () => {
+    // Set context without pull_request
+    github.context.payload = {}
+
     await run()
 
-    // Verify the time output was set.
-    expect(core.setOutput).toHaveBeenNthCalledWith(
-      1,
-      'time',
-      // Simple regex to match a time string in the format HH:MM:SS.
-      expect.stringMatching(/^\d{2}:\d{2}:\d{2}/)
+    expect(core.setFailed).toHaveBeenCalledWith(
+      'This action can only be run on pull requests'
     )
   })
 
-  it('Sets a failed status', async () => {
-    // Clear the getInput mock and return an invalid value.
-    core.getInput.mockClear().mockReturnValueOnce('this is not a number')
+  it('Detects conflict markers in files', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
 
-    // Clear the wait mock and return a rejected promise.
-    wait
-      .mockClear()
-      .mockRejectedValueOnce(new Error('milliseconds is not a number'))
+    // Mock PR files
+    mockOctokit.rest.pulls.listFiles.mockResolvedValue({
+      data: [{ filename: 'test.js', status: 'modified' }]
+    })
+
+    // Mock file content with conflict markers
+    mockOctokit.rest.repos.getContent.mockResolvedValue({
+      data: {
+        content: Buffer.from(
+          'line1\n<<<<<<< HEAD\nline2\n=======\nline3\n>>>>>>> branch\nline4'
+        ).toString('base64')
+      }
+    })
 
     await run()
 
-    // Verify that the action was marked as failed.
-    expect(core.setFailed).toHaveBeenNthCalledWith(
-      1,
-      'milliseconds is not a number'
+    expect(core.error).toHaveBeenCalledWith(
+      expect.stringContaining('Conflict marker found in test.js')
+    )
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Found conflict markers in 1 file(s)')
+    )
+    expect(core.setOutput).toHaveBeenCalledWith('has-conflicts', 'true')
+    expect(core.setOutput).toHaveBeenCalledWith(
+      'conflicted-files',
+      expect.stringContaining('test.js')
+    )
+  })
+
+  it('Passes when no conflict markers found', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock PR files
+    mockOctokit.rest.pulls.listFiles.mockResolvedValue({
+      data: [{ filename: 'test.js', status: 'modified' }]
+    })
+
+    // Mock file content without conflict markers
+    mockOctokit.rest.repos.getContent.mockResolvedValue({
+      data: {
+        content: Buffer.from('line1\nline2\nline3\nline4').toString('base64')
+      }
+    })
+
+    await run()
+
+    expect(core.info).toHaveBeenCalledWith('No conflict markers found!')
+    expect(core.setOutput).toHaveBeenCalledWith('has-conflicts', 'false')
+    expect(core.setOutput).toHaveBeenCalledWith('conflicted-files', '')
+    expect(core.setFailed).not.toHaveBeenCalled()
+  })
+
+  it('Ignores removed files', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock PR files with removed file
+    mockOctokit.rest.pulls.listFiles.mockResolvedValue({
+      data: [
+        { filename: 'removed.js', status: 'removed' },
+        { filename: 'test.js', status: 'modified' }
+      ]
+    })
+
+    // Mock file content without conflict markers
+    mockOctokit.rest.repos.getContent.mockResolvedValue({
+      data: {
+        content: Buffer.from('line1\nline2\nline3\nline4').toString('base64')
+      }
+    })
+
+    await run()
+
+    // Should only check test.js, not removed.js
+    expect(mockOctokit.rest.repos.getContent).toHaveBeenCalledTimes(1)
+    expect(mockOctokit.rest.repos.getContent).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'test.js' })
     )
   })
 })

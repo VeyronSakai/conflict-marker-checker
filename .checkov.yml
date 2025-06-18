@@ -1,0 +1,4 @@
+quiet: true
+skip-check:
+  - CKV_GHA_2 # Skip check for pinning actions to commit SHA
+  - CKV_GHA_7 # Skip check for secrets in workflows

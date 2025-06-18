@@ -1,23 +1,29 @@
-name: The name of your action here
-description: Provide a description here
-author: Your name or organization here
+name: Conflict Marker Checker
+description: Check if PR files contain conflict markers
+author: VeyronSakai
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.
 branding:
-  icon: heart
+  icon: alert-triangle
   color: red
 
 # Define your inputs here.
 inputs:
-  milliseconds:
-    description: Your input description here
+  github-token:
+    description: GitHub token for API access
     required: true
-    default: '1000'
+    default: ${{ github.token }}
+  exclude-patterns:
+    description: Comma-separated list of file patterns to exclude from checking
+    required: false
+    default: ''
 
 # Define your outputs here.
 outputs:
-  time:
-    description: Your output description here
+  has-conflicts:
+    description: Whether conflict markers were found (true/false)
+  conflicted-files:
+    description: Comma-separated list of files with conflicts
 
 runs:
   using: node20
