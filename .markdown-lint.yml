@@ -4,6 +4,9 @@
 MD004:
   style: dash
 
+# Disable final newline rule
+MD047: false
+
 # Disable line length for tables
 MD013:
   tables: false
