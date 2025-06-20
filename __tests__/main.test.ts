@@ -79,7 +79,11 @@ describe('main.ts', () => {
 
     // Mock PR files
     mockOctokit.rest.pulls.listFiles.mockResolvedValue({
-      data: [{ filename: 'test.js', status: 'modified' }]
+      data: [{ filename: 'test.js', status: 'modified' }],
+      headers: {
+        'x-ratelimit-remaining': '900',
+        'x-ratelimit-reset': '9999999999'
+      }
     })
 
     // Mock file content with conflict markers
@@ -117,7 +121,11 @@ describe('main.ts', () => {
 
     // Mock PR files
     mockOctokit.rest.pulls.listFiles.mockResolvedValue({
-      data: [{ filename: 'test.js', status: 'modified' }]
+      data: [{ filename: 'test.js', status: 'modified' }],
+      headers: {
+        'x-ratelimit-remaining': '900',
+        'x-ratelimit-reset': '9999999999'
+      }
     })
 
     // Mock file content without conflict markers
@@ -149,7 +157,11 @@ describe('main.ts', () => {
       data: [
         { filename: 'removed.js', status: 'removed' },
         { filename: 'test.js', status: 'modified' }
-      ]
+      ],
+      headers: {
+        'x-ratelimit-remaining': '900',
+        'x-ratelimit-reset': '9999999999'
+      }
     })
 
     // Mock file content without conflict markers
@@ -166,5 +178,151 @@ describe('main.ts', () => {
     expect(mockOctokit.rest.repos.getContent).toHaveBeenCalledWith(
       expect.objectContaining({ path: 'test.js' })
     )
+  })
+
+  it('Handles pagination for large PRs', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock PR files with pagination (150 files total)
+    const createFiles = (start: number, count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        filename: `file${start + i}.js`,
+        status: 'modified'
+      }))
+
+    mockOctokit.rest.pulls.listFiles
+      .mockResolvedValueOnce({
+        data: createFiles(0, 100),
+        headers: {
+          'x-ratelimit-remaining': '900',
+          'x-ratelimit-reset': '9999999999'
+        }
+      }) // First page
+      .mockResolvedValueOnce({
+        data: createFiles(100, 50),
+        headers: {
+          'x-ratelimit-remaining': '899',
+          'x-ratelimit-reset': '9999999999'
+        }
+      }) // Second page
+
+    // Mock file content without conflict markers
+    mockOctokit.rest.repos.getContent.mockResolvedValue({
+      data: {
+        content: Buffer.from('line1\nline2\nline3\nline4').toString('base64')
+      }
+    })
+
+    await run()
+
+    // Verify pagination calls
+    expect(mockOctokit.rest.pulls.listFiles).toHaveBeenCalledTimes(2)
+    expect(mockOctokit.rest.pulls.listFiles).toHaveBeenNthCalledWith(1, {
+      owner: 'test-owner',
+      repo: 'test-repo',
+      pull_number: 123,
+      per_page: 100,
+      page: 1
+    })
+    expect(mockOctokit.rest.pulls.listFiles).toHaveBeenNthCalledWith(2, {
+      owner: 'test-owner',
+      repo: 'test-repo',
+      pull_number: 123,
+      per_page: 100,
+      page: 2
+    })
+
+    // Verify all 150 files were checked
+    expect(mockOctokit.rest.repos.getContent).toHaveBeenCalledTimes(150)
+    expect(core.info).toHaveBeenCalledWith('Total files to check: 150')
+    expect(core.info).toHaveBeenCalledWith('No conflict markers found!')
+  })
+
+  it('Handles rate limit errors with retry', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock rate limit error on first call, then success
+    const rateLimitError = new Error('Rate limit exceeded')
+    Object.assign(rateLimitError, {
+      status: 429,
+      response: {
+        headers: {
+          'retry-after': '2',
+          'x-ratelimit-reset': String(Math.floor(Date.now() / 1000) + 60)
+        }
+      }
+    })
+
+    mockOctokit.rest.pulls.listFiles
+      .mockRejectedValueOnce(rateLimitError)
+      .mockResolvedValueOnce({
+        data: [{ filename: 'test.js', status: 'modified' }],
+        headers: {
+          'x-ratelimit-remaining': '500',
+          'x-ratelimit-reset': '9999999999'
+        }
+      })
+
+    // Mock file content without conflict markers
+    mockOctokit.rest.repos.getContent.mockResolvedValue({
+      data: {
+        content: Buffer.from('line1\nline2\nline3\nline4').toString('base64')
+      }
+    })
+
+    await run()
+
+    // Verify retry happened
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Rate limited. Waiting')
+    )
+    expect(mockOctokit.rest.pulls.listFiles).toHaveBeenCalledTimes(2)
+    expect(core.info).toHaveBeenCalledWith('No conflict markers found!')
+  })
+
+  it('Warns on low rate limit', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock PR files with low rate limit
+    mockOctokit.rest.pulls.listFiles.mockResolvedValue({
+      data: [{ filename: 'test.js', status: 'modified' }],
+      headers: {
+        'x-ratelimit-remaining': '50',
+        'x-ratelimit-reset': '9999999999'
+      }
+    })
+
+    // Mock file content without conflict markers
+    mockOctokit.rest.repos.getContent.mockResolvedValue({
+      data: {
+        content: Buffer.from('line1\nline2\nline3\nline4').toString('base64')
+      }
+    })
+
+    await run()
+
+    // Verify warning about low rate limit
+    expect(core.warning).toHaveBeenCalledWith(
+      expect.stringContaining('Low API rate limit: 50 requests remaining')
+    )
+    expect(core.info).toHaveBeenCalledWith('No conflict markers found!')
   })
 })

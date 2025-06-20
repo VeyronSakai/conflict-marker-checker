@@ -31253,18 +31253,79 @@ async function run() {
         const { owner, repo } = context.repo;
         const pull_number = context.payload.pull_request.number;
         coreExports.info(`Checking PR #${pull_number} for conflict markers...`);
-        const { data: files } = await octokit.rest.pulls.listFiles({
-            owner,
-            repo,
-            pull_number,
-            per_page: 100
-        });
+        // Fetch all files with pagination
+        const allFiles = [];
+        let page = 1;
+        const perPage = 100;
+        let retries = 0;
+        const maxRetries = 3;
+        while (true) {
+            try {
+                const response = await octokit.rest.pulls.listFiles({
+                    owner,
+                    repo,
+                    pull_number,
+                    per_page: perPage,
+                    page
+                });
+                // Check rate limit headers
+                const remaining = parseInt(response.headers['x-ratelimit-remaining'] || '0');
+                const reset = parseInt(response.headers['x-ratelimit-reset'] || '0');
+                if (remaining < 100) {
+                    coreExports.warning(`Low API rate limit: ${remaining} requests remaining. Reset at ${new Date(reset * 1000).toISOString()}`);
+                }
+                allFiles.push(...response.data);
+                if (response.data.length < perPage) {
+                    break;
+                }
+                page++;
+                coreExports.info(`Fetched ${allFiles.length} files so far...`);
+                // Add small delay every 10 pages to avoid secondary rate limits
+                if (page % 10 === 1 && page > 1) {
+                    coreExports.debug('Adding delay to avoid rate limits...');
+                    await new Promise((resolve) => setTimeout(resolve, 200));
+                }
+                // Reset retry counter on success
+                retries = 0;
+            }
+            catch (error) {
+                if (error &&
+                    typeof error === 'object' &&
+                    'status' in error &&
+                    (error.status === 403 || error.status === 429)) {
+                    if (retries >= maxRetries) {
+                        throw new Error(`GitHub API rate limit exceeded after ${maxRetries} retries`);
+                    }
+                    const errorWithResponse = error;
+                    const retryAfter = errorWithResponse.response?.headers?.['retry-after'];
+                    const resetTime = errorWithResponse.response?.headers?.['x-ratelimit-reset'];
+                    let waitTime = 60000; // Default 1 minute
+                    if (retryAfter) {
+                        waitTime = parseInt(retryAfter) * 1000;
+                    }
+                    else if (resetTime) {
+                        waitTime = Math.max(parseInt(resetTime) * 1000 - Date.now(), 1000);
+                    }
+                    else {
+                        // Exponential backoff for secondary rate limits
+                        waitTime = Math.min(60000 * Math.pow(2, retries), 300000);
+                    }
+                    coreExports.warning(`Rate limited. Waiting ${waitTime / 1000} seconds before retry ${retries + 1}/${maxRetries}...`);
+                    await new Promise((resolve) => setTimeout(resolve, waitTime));
+                    retries++;
+                }
+                else {
+                    throw error;
+                }
+            }
+        }
+        coreExports.info(`Total files to check: ${allFiles.length}`);
         const conflictMarkers = ['<<<<<<<', '>>>>>>>', '======='];
         const filesWithConflicts = [];
         const excludeList = excludePatterns
             ? excludePatterns.split(',').map((p) => p.trim())
             : [];
-        for (const file of files) {
+        for (const file of allFiles) {
             if (file.status === 'removed')
                 continue;
             // Skip files matching exclude patterns
