@@ -19,6 +19,10 @@ on:
 permissions:
   contents: write
 
+defaults:
+  run:
+    shell: pwsh
+
 jobs:
   licensed:
     name: Check Licenses
