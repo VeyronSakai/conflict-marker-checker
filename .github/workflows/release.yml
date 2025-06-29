@@ -45,20 +45,20 @@ jobs:
     outputs:
       version_changed: ${{ steps.check-version.outputs.version_changed }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Check version change
         id: check-version
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          # Get version from base branch
-          git checkout ${{ github.event.pull_request.base.sha }}
-          $basePackageJson = Get-Content -Path $env:PACKAGE_JSON_PATH -Raw | ConvertFrom-Json
+          # Get version from base branch using GitHub API
+          $basePackageJsonContent = gh api "repos/$env:GITHUB_REPOSITORY/contents/package.json?ref=$env:BASE_SHA" --jq .content | base64 -d
+          $basePackageJson = $basePackageJsonContent | ConvertFrom-Json
           $baseVersion = $basePackageJson.version
 
-          # Get version from head branch
-          git checkout ${{ github.event.pull_request.head.sha }}
-          $headPackageJson = Get-Content -Path $env:PACKAGE_JSON_PATH -Raw | ConvertFrom-Json
+          # Get version from head branch using GitHub API
+          $headPackageJsonContent = gh api "repos/$env:GITHUB_REPOSITORY/contents/package.json?ref=$env:HEAD_SHA" --jq .content | base64 -d
+          $headPackageJson = $headPackageJsonContent | ConvertFrom-Json
           $headVersion = $headPackageJson.version
 
           Write-Output "Base version: $baseVersion"
@@ -76,7 +76,7 @@ jobs:
     name: Update Draft
     if: ${{ (github.event_name == 'pull_request' &&
       github.event.pull_request.base.ref == 'main') || github.event_name ==
-      'workflow_dispatch'}}
+      'workflow_dispatch' }}
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
