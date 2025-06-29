@@ -69,7 +69,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check for conflict markers
-        uses: VeyronSakai/conflict-marker-checker@v1
+        uses: VeyronSakai/conflict-marker-checker@v0.2
         id: conflict-check
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
