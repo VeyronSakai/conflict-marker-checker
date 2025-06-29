@@ -88,13 +88,13 @@ jobs:
           $fileList = $files | ForEach-Object { "- $_" }
           $body = @"
           ⚠️ **Conflict markers detected!**
-          
+
           The following files contain conflict markers:
           $($fileList -join "`n")
-          
+
           Please resolve all conflicts before merging.
           "@
-          
+
           gh pr comment --body $body
 ```
 
