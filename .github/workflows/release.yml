@@ -70,9 +70,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Update package.json
         run: |
-          $jsonContent = Get-Content -Path $env:PACKAGE_JSON_PATH -Raw
-          $updatedJson = $jsonContent | jq --arg version $env:VERSION '.version = $version'
-          $updatedJson | jq '.' | Set-Content -Path $env:PACKAGE_JSON_PATH
+          $packageJson = Get-Content -Path $env:PACKAGE_JSON_PATH -Raw | ConvertFrom-Json
+          $packageJson.version = $env:VERSION
+          $packageJson | ConvertTo-Json -Depth 100 | Set-Content -Path $env:PACKAGE_JSON_PATH
       - name: Commit package.json
         uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5
         id: commit-package-json
@@ -130,7 +130,8 @@ jobs:
           ref: main
       - name: Validate version in package.json
         run: |
-          $packageVersion = jq -r '.version' $env:PACKAGE_JSON_PATH
+          $packageJson = Get-Content -Path $env:PACKAGE_JSON_PATH -Raw | ConvertFrom-Json
+          $packageVersion = $packageJson.version
           if ($packageVersion -ne $env:VERSION) {
             Write-Host "::error::version in package.json ($packageVersion) does not match the release draft tag ($env:VERSION)"
             exit 1
@@ -160,8 +161,8 @@ jobs:
       - name: Update major tag
         if: steps.get-semver.outputs.major != '0'
         run: |
-          git push -f origin "refs/tags/$env:VERSION`:refs/tags/${{ steps.get-semver.outputs.major }}"
+          git push -f origin "refs/tags/$env:VERSION:refs/tags/${{ steps.get-semver.outputs.major }}"
       - name: Update minor tag
         if: steps.get-semver.outputs.minor != '0.0'
         run: |
-          git push -f origin "refs/tags/$env:VERSION`:refs/tags/${{ steps.get-semver.outputs.minor }}"
+          git push -f origin "refs/tags/$env:VERSION:refs/tags/${{ steps.get-semver.outputs.minor }}"
