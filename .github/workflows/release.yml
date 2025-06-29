@@ -37,10 +37,44 @@ jobs:
             package_json:
               - ${{ env.PACKAGE_JSON_PATH }}
 
+  check-version:
+    name: Check Version
+    needs: paths-filter
+    if: ${{ github.event_name == 'pull_request' && needs.paths-filter.outputs.package_json == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      version_changed: ${{ steps.check-version.outputs.version_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check version change
+        id: check-version
+        run: |
+          # Get version from base branch
+          git checkout ${{ github.event.pull_request.base.sha }}
+          $basePackageJson = Get-Content -Path $env:PACKAGE_JSON_PATH -Raw | ConvertFrom-Json
+          $baseVersion = $basePackageJson.version
+
+          # Get version from head branch
+          git checkout ${{ github.event.pull_request.head.sha }}
+          $headPackageJson = Get-Content -Path $env:PACKAGE_JSON_PATH -Raw | ConvertFrom-Json
+          $headVersion = $headPackageJson.version
+
+          Write-Output "Base version: $baseVersion"
+          Write-Output "Head version: $headVersion"
+
+          if ($baseVersion -ne $headVersion) {
+            Write-Output "Version changed from $baseVersion to $headVersion"
+            "version_changed=true" | Add-Content -Path $env:GITHUB_OUTPUT
+          } else {
+            Write-Output "Version unchanged: $headVersion"
+            "version_changed=false" | Add-Content -Path $env:GITHUB_OUTPUT
+          }
+
   update-draft:
     name: Update Draft
-    if:
-      ${{ (github.event_name == 'pull_request' &&
+    if: ${{ (github.event_name == 'pull_request' &&
       github.event.pull_request.base.ref == 'main') || github.event_name ==
       'workflow_dispatch'}}
     runs-on: ubuntu-latest
@@ -79,7 +113,7 @@ jobs:
         with:
           author_name: ${{ env.GITHUB_BOT_NAME }}
           author_email: ${{ env.GITHUB_BOT_EMAIL }}
-          message: 'Update package.json'
+          message: "Update package.json"
           add: ${{ env.PACKAGE_JSON_PATH }}
           new_branch: ${{ env.SOURCE_BRANCH }}
       - name: Update README.md
@@ -91,8 +125,8 @@ jobs:
         with:
           author_name: ${{ env.GITHUB_BOT_NAME }}
           author_email: ${{ env.GITHUB_BOT_EMAIL }}
-          message: 'Update README.md'
-          add: 'README.md'
+          message: "Update README.md"
+          add: "README.md"
           new_branch: ${{ env.SOURCE_BRANCH }}
       - uses: actions/create-github-app-token@v2
         id: create-github-app-token
@@ -100,8 +134,7 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: Create pull request and merge
-        if:
-          ${{ steps.commit-package-json.outputs.committed == 'true' ||
+        if: ${{ steps.commit-package-json.outputs.committed == 'true' ||
           steps.commit-readme.outputs.committed == 'true'}}
         env:
           GH_TOKEN: ${{ steps.create-github-app-token.outputs.token }}
@@ -111,17 +144,17 @@ jobs:
 
   release:
     name: Release
-    needs: [update-draft, paths-filter]
+    needs: [update-draft, paths-filter, check-version]
     environment: Release
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}
       cancel-in-progress: false
-    if:
-      ${{ github.event_name == 'pull_request' &&
+    if: ${{ github.event_name == 'pull_request' &&
       github.event.pull_request.base.ref == 'main' &&
       github.event.pull_request.merged &&
-      needs.paths-filter.outputs.package_json == 'true' }}
+      needs.paths-filter.outputs.package_json == 'true' &&
+      needs.check-version.outputs.version_changed == 'true' }}
     env:
       VERSION: ${{ needs.update-draft.outputs.tag_name }}
     steps:
