@@ -133,7 +133,7 @@ jobs:
           $packageJson = Get-Content -Path $env:PACKAGE_JSON_PATH -Raw | ConvertFrom-Json
           $packageVersion = $packageJson.version
           if ($packageVersion -ne $env:VERSION) {
-            Write-Host "::error::version in package.json ($packageVersion) does not match the release draft tag ($env:VERSION)"
+            Write-Error "version in package.json ($packageVersion) does not match the release draft tag ($env:VERSION)"
             exit 1
           }
       - uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5
@@ -152,7 +152,7 @@ jobs:
             "minor=$major.$minor" | Add-Content -Path $env:GITHUB_OUTPUT
             "patch=$major.$minor.$patch" | Add-Content -Path $env:GITHUB_OUTPUT
           } else {
-            Write-Host "::error::Unable to parse version: $env:VERSION"
+            Write-Error "Unable to parse version: $env:VERSION"
             exit 1
           }
       - uses: actions/checkout@v4
