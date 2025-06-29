@@ -25,11 +25,8 @@ jobs:
   check-conflicts:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Check for conflict markers
-        uses: VeyronSakai/conflict-marker-checker@v1
+        uses: VeyronSakai/conflict-marker-checker@v0.2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
