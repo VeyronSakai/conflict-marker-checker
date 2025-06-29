@@ -79,19 +79,23 @@ jobs:
 
       - name: Comment on PR if conflicts found
         if: steps.conflict-check.outputs.conflicts == 'true'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const files = '${{ steps.conflict-check.outputs.conflicted-files }}'.split(',');
-            const body = `⚠️ **Conflict markers detected!**\n\nThe following files contain conflict markers:\n${files.map(f => `- ${f}`).join('\n')}\n\nPlease resolve all conflicts before merging.`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: body
-            });
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CONFLICTED_FILES: ${{ steps.conflict-check.outputs.conflicted-files }}
+        run: |
+          $files = $env:CONFLICTED_FILES -split ','
+          $fileList = $files | ForEach-Object { "- $_" }
+          $body = @"
+          ⚠️ **Conflict markers detected!**
+          
+          The following files contain conflict markers:
+          $($fileList -join "`n")
+          
+          Please resolve all conflicts before merging.
+          "@
+          
+          gh pr comment --body $body
 ```
 
 ## Development
