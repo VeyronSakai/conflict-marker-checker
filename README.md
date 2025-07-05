@@ -170,8 +170,6 @@ INPUT_GITHUB-TOKEN=your_github_token
 INPUT_EXCLUDE-PATTERNS=
 ```
 
-**Note**: `INPUT_GITHUB-TOKEN` must have the same value as `GITHUB_TOKEN` for the action inputs to work properly.
-
 2. Create a `test-pr-event.json` file with pull request event data:
 
 ```json
