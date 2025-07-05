@@ -131,7 +131,8 @@ Create `test-pr-event.json` file with PR event data:
 }
 ```
 
-Replace the values with actual PR data from your repository. You can get this information from GitHub API or an existing PR.
+Replace the values with actual PR data from your repository. You can get this
+information from GitHub API or an existing PR.
 
 Run the local test:
 

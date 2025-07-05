@@ -164,7 +164,8 @@ INPUT_EXCLUDE-PATTERNS=
 }
 ```
 
-Replace the values with actual pull request data from your repository. You can get this information from:
+Replace the values with actual pull request data from your repository. You can
+get this information from:
 
 - GitHub API: `GET /repos/{owner}/{repo}/pulls/{pull_number}`
 - An existing pull request in your repository
