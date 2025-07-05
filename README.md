@@ -65,9 +65,6 @@ jobs:
   check-conflicts:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Check for conflict markers
         uses: VeyronSakai/conflict-marker-checker@v0.2
         id: conflict-check
@@ -75,7 +72,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Comment on PR if conflicts found
-        if: steps.conflict-check.outputs.conflicts == 'true'
+        if: ${{ steps.conflict-check.outputs.conflicts == 'true' }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
