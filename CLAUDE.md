@@ -102,10 +102,44 @@ Create `.env` file with:
 GITHUB_TOKEN=your_github_token
 GITHUB_REPOSITORY=owner/repo
 GITHUB_EVENT_NAME=pull_request
-GITHUB_EVENT_PATH=path/to/event.json
+GITHUB_EVENT_PATH=test-pr-event.json
+INPUT_GITHUB-TOKEN=your_github_token
+INPUT_EXCLUDE-PATTERNS=
 ```
 
-Then run: `npm run local-action`
+Note: `INPUT_GITHUB-TOKEN` must have the same value as `GITHUB_TOKEN` for the action inputs to work properly.
+
+Create `test-pr-event.json` file with PR event data:
+
+```json
+{
+  "pull_request": {
+    "number": 123,
+    "head": {
+      "sha": "abc123def456...",
+      "ref": "feature-branch"
+    },
+    "base": {
+      "sha": "789012efg345...",
+      "ref": "main"
+    }
+  },
+  "repository": {
+    "name": "repo-name",
+    "owner": {
+      "login": "owner-name"
+    }
+  }
+}
+```
+
+Replace the values with actual PR data from your repository. You can get this information from GitHub API or an existing PR.
+
+Run the local test:
+
+```bash
+npx @github/local-action . src/main.ts .env
+```
 
 ### Code Quality
 

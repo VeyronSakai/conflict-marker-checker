@@ -155,6 +155,59 @@ This action:
 4. Reports any files containing these markers
 5. Fails the workflow if conflicts are detected
 
+## Local Testing
+
+You can test this action locally using the `@github/local-action` tool:
+
+1. Create a `.env` file with your GitHub credentials:
+
+```env
+GITHUB_TOKEN=your_github_token
+GITHUB_REPOSITORY=owner/repo
+GITHUB_EVENT_NAME=pull_request
+GITHUB_EVENT_PATH=test-pr-event.json
+INPUT_GITHUB-TOKEN=your_github_token
+INPUT_EXCLUDE-PATTERNS=
+```
+
+**Note**: `INPUT_GITHUB-TOKEN` must have the same value as `GITHUB_TOKEN` for the action inputs to work properly.
+
+2. Create a `test-pr-event.json` file with pull request event data:
+
+```json
+{
+  "pull_request": {
+    "number": 123,
+    "head": {
+      "sha": "abc123def456...",
+      "ref": "feature-branch"
+    },
+    "base": {
+      "sha": "789012efg345...",
+      "ref": "main"
+    }
+  },
+  "repository": {
+    "name": "repo-name",
+    "owner": {
+      "login": "owner-name"
+    }
+  }
+}
+```
+
+Replace the values with actual pull request data from your repository. You can get this information from:
+- GitHub API: `GET /repos/{owner}/{repo}/pulls/{pull_number}`
+- An existing pull request in your repository
+
+3. Run the local test:
+
+```bash
+npx @github/local-action . src/main.ts .env
+```
+
+This will execute the action locally and show you the results without needing to push changes to GitHub.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
