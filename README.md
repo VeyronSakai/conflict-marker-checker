@@ -130,37 +130,7 @@ jobs:
 
 You can test the action locally using the `@github/local-action` utility:
 
-```bash
-npx @github/local-action . src/main.ts .env
-```
-
-Create a `.env` file with the necessary environment variables:
-
-```env
-GITHUB_TOKEN=your_github_token
-GITHUB_REPOSITORY=owner/repo
-GITHUB_EVENT_NAME=pull_request
-GITHUB_EVENT_PATH=path/to/event.json
-```
-
-## How It Works
-
-This action:
-
-1. Fetches the list of changed files in the pull request
-2. Reads the content of each modified file
-3. Searches for Git conflict markers:
-   - `<<<<<<<` (conflict start)
-   - `=======` (conflict separator)
-   - `>>>>>>>` (conflict end)
-4. Reports any files containing these markers
-5. Fails the workflow if conflicts are detected
-
-## Local Testing
-
-You can test this action locally using the `@github/local-action` tool:
-
-1. Create a `.env` file with your GitHub credentials:
+**Step 1: Create a `.env` file**
 
 ```env
 GITHUB_TOKEN=your_github_token
@@ -171,7 +141,7 @@ INPUT_GITHUB-TOKEN=your_github_token
 INPUT_EXCLUDE-PATTERNS=
 ```
 
-2. Create a `test-pr-event.json` file with pull request event data:
+**Step 2: Create a `test-pr-event.json` file**
 
 ```json
 {
@@ -201,14 +171,24 @@ get this information from:
 - GitHub API: `GET /repos/{owner}/{repo}/pulls/{pull_number}`
 - An existing pull request in your repository
 
-3. Run the local test:
+**Step 3: Run the local test**
 
 ```bash
 npx @github/local-action . src/main.ts .env
 ```
 
-This will execute the action locally and show you the results without needing to
-push changes to GitHub.
+## How It Works
+
+This action:
+
+1. Fetches the list of changed files in the pull request
+2. Reads the content of each modified file
+3. Searches for Git conflict markers:
+   - `<<<<<<<` (conflict start)
+   - `=======` (conflict separator)
+   - `>>>>>>>` (conflict end)
+4. Reports any files containing these markers
+5. Fails the workflow if conflicts are detected
 
 ## Contributing
 
