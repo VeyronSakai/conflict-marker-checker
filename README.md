@@ -5,6 +5,7 @@
 [![Check dist/](https://github.com/VeyronSakai/conflict-marker-checker/actions/workflows/check-dist.yml/badge.svg)](https://github.com/VeyronSakai/conflict-marker-checker/actions/workflows/check-dist.yml)
 [![CodeQL](https://github.com/VeyronSakai/conflict-marker-checker/actions/workflows/codeql-analysis.yml/badge.svg)](https://github.com/VeyronSakai/conflict-marker-checker/actions/workflows/codeql-analysis.yml)
 [![Coverage](./badges/coverage.svg)](./badges/coverage.svg)
+[![Licensed](https://github.com/VeyronSakai/conflict-marker-checker/actions/workflows/licensed.yml/badge.svg)](https://github.com/VeyronSakai/conflict-marker-checker/actions/workflows/licensed.yml)
 
 A GitHub Action that checks if pull request files contain Git conflict markers
 (`<<<<<<<`, `=======`, `>>>>>>>`).
