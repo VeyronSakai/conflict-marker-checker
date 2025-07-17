@@ -153,7 +153,7 @@ export async function run(): Promise<void> {
             for (const marker of conflictMarkers) {
               if (line.includes(marker)) {
                 if (!conflictFound) {
-                  filesWithConflicts.push(`${file.filename}:${i + 1}`)
+                  filesWithConflicts.push(file.filename)
                   conflictFound = true
                 }
                 core.error(

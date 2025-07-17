@@ -41,10 +41,10 @@ jobs:
 
 ### Outputs
 
-| Name               | Description                                                                    |
-| ------------------ | ------------------------------------------------------------------------------ |
-| `conflicts`        | Whether conflict markers were found (true/false)                               |
-| `conflicted-files` | Comma-separated list of files with conflicts (e.g., `file1.js:10,file2.ts:25`) |
+| Name               | Description                                                              |
+| ------------------ | ------------------------------------------------------------------------ |
+| `conflicts`        | Whether conflict markers were found (true/false)                         |
+| `conflicted-files` | Comma-separated list of files with conflicts (e.g., `file1.js,file2.ts`) |
 
 ## Example Workflow with PR Comment
 

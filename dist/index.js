@@ -31350,7 +31350,7 @@ async function run() {
                         for (const marker of conflictMarkers) {
                             if (line.includes(marker)) {
                                 if (!conflictFound) {
-                                    filesWithConflicts.push(`${file.filename}:${i + 1}`);
+                                    filesWithConflicts.push(file.filename);
                                     conflictFound = true;
                                 }
                                 coreExports.error(`Conflict marker found in ${file.filename} at line ${i + 1}: ${line.trim()}`);
