@@ -325,4 +325,54 @@ describe('main.ts', () => {
     )
     expect(core.info).toHaveBeenCalledWith('No conflict markers found!')
   })
+
+  it('Detects conflict markers in Git LFS pointer files', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock PR files
+    mockOctokit.rest.pulls.listFiles.mockResolvedValue({
+      data: [{ filename: 'large-file.bin', status: 'modified' }],
+      headers: {
+        'x-ratelimit-remaining': '900',
+        'x-ratelimit-reset': '9999999999'
+      }
+    })
+
+    // Mock conflicted Git LFS pointer file content
+    const conflictedLFSPointer = `<<<<<<< HEAD
+version https://git-lfs.github.com/spec/v1
+oid sha256:4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393
+size 12345
+=======
+version https://git-lfs.github.com/spec/v1
+oid sha256:6cb562612d7a9f2e9d2c5b3f1b8f9e0ff69d22eadbb8f32b1258daaa5e2ca24
+size 67890
+>>>>>>> feature-branch`
+
+    mockOctokit.rest.repos.getContent.mockResolvedValue({
+      data: {
+        content: Buffer.from(conflictedLFSPointer).toString('base64')
+      }
+    })
+
+    await run()
+
+    expect(core.error).toHaveBeenCalledWith(
+      expect.stringContaining('Conflict marker found in large-file.bin')
+    )
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Found conflict markers in 1 file(s)')
+    )
+    expect(core.setOutput).toHaveBeenCalledWith('conflicts', 'true')
+    expect(core.setOutput).toHaveBeenCalledWith(
+      'conflicted-files',
+      expect.stringContaining('large-file.bin')
+    )
+  })
 })
