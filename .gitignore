@@ -103,3 +103,6 @@ __tests__/runner/*
 
 # Test files
 test-pr-event.json
+
+# Serena directory
+.serena
