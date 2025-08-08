@@ -375,4 +375,150 @@ size 67890
       expect.stringContaining('large-file.bin')
     )
   })
+
+  it('Ignores conflict-like patterns in comments', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock PR files
+    mockOctokit.rest.pulls.listFiles.mockResolvedValue({
+      data: [{ filename: 'test.js', status: 'modified' }],
+      headers: {
+        'x-ratelimit-remaining': '900',
+        'x-ratelimit-reset': '9999999999'
+      }
+    })
+
+    // Mock file content with comment containing separator-like pattern
+    const codeWithComments = `function test() {
+  // =======================
+  // This is a comment separator
+  // =======================
+  console.log('hello');
+  
+  /* <<<<<<< This looks like a conflict marker but it's in a comment */
+  const x = 1;
+  
+  // Another comment with >>>>>>> branch-name
+  return x;
+}`
+
+    mockOctokit.rest.repos.getContent.mockResolvedValue({
+      data: {
+        content: Buffer.from(codeWithComments).toString('base64')
+      }
+    })
+
+    await run()
+
+    // Should NOT detect these as conflict markers
+    expect(core.error).not.toHaveBeenCalled()
+    expect(core.info).toHaveBeenCalledWith('No conflict markers found!')
+    expect(core.setOutput).toHaveBeenCalledWith('conflicts', 'false')
+    expect(core.setOutput).toHaveBeenCalledWith('conflicted-files', '')
+    expect(core.setFailed).not.toHaveBeenCalled()
+  })
+
+  it('Detects real conflict markers at line start', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock PR files
+    mockOctokit.rest.pulls.listFiles.mockResolvedValue({
+      data: [{ filename: 'test.js', status: 'modified' }],
+      headers: {
+        'x-ratelimit-remaining': '900',
+        'x-ratelimit-reset': '9999999999'
+      }
+    })
+
+    // Mock file content with real conflict markers and comments
+    const codeWithRealConflict = `function test() {
+  // This comment has ======= but should be ignored
+  const x = 1;
+<<<<<<< HEAD
+  const y = 2;
+=======
+  const y = 3;
+>>>>>>> feature-branch
+  return x + y;
+}`
+
+    mockOctokit.rest.repos.getContent.mockResolvedValue({
+      data: {
+        content: Buffer.from(codeWithRealConflict).toString('base64')
+      }
+    })
+
+    await run()
+
+    // Should detect real conflict markers
+    expect(core.error).toHaveBeenCalledWith(
+      expect.stringContaining('Conflict marker found in test.js')
+    )
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Found conflict markers in 1 file(s)')
+    )
+    expect(core.setOutput).toHaveBeenCalledWith('conflicts', 'true')
+    expect(core.setOutput).toHaveBeenCalledWith(
+      'conflicted-files',
+      expect.stringContaining('test.js')
+    )
+  })
+
+  it('Handles conflict markers with leading whitespace', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock PR files
+    mockOctokit.rest.pulls.listFiles.mockResolvedValue({
+      data: [{ filename: 'test.yaml', status: 'modified' }],
+      headers: {
+        'x-ratelimit-remaining': '900',
+        'x-ratelimit-reset': '9999999999'
+      }
+    })
+
+    // Mock file content with indented conflict markers (common in YAML/JSON)
+    const yamlWithConflict = `config:
+  setting1: value1
+  <<<<<<< HEAD
+  setting2: value2-from-head
+  =======
+  setting2: value2-from-branch
+  >>>>>>> feature-branch
+  setting3: value3`
+
+    mockOctokit.rest.repos.getContent.mockResolvedValue({
+      data: {
+        content: Buffer.from(yamlWithConflict).toString('base64')
+      }
+    })
+
+    await run()
+
+    // Should detect conflict markers even with leading whitespace
+    expect(core.error).toHaveBeenCalledWith(
+      expect.stringContaining('Conflict marker found in test.yaml')
+    )
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Found conflict markers in 1 file(s)')
+    )
+    expect(core.setOutput).toHaveBeenCalledWith('conflicts', 'true')
+  })
 })

@@ -151,7 +151,9 @@ export async function run(): Promise<void> {
           for (let i = 0; i < lines.length; i++) {
             const line = lines[i]
             for (const marker of conflictMarkers) {
-              if (line.includes(marker)) {
+              // Check if the marker appears at the beginning of the line (with optional whitespace)
+              // This is how Git actually places conflict markers
+              if (line.trimStart().startsWith(marker)) {
                 if (!conflictFound) {
                   filesWithConflicts.push(file.filename)
                   conflictFound = true
