@@ -31310,15 +31310,6 @@ const isFileRemoved = (status) => {
 };
 
 /**
- * Check if a file should be checked for conflicts
- */
-const shouldCheckFile = (file, excludePatterns) => {
-    if (isFileRemoved(file.status)) {
-        return false;
-    }
-    return !excludePatterns.some((pattern) => file.fileName.includes(pattern));
-};
-/**
  * Check pull request for conflicts function
  */
 const checkPullRequestForConflicts = async (dependencies) => {
@@ -31366,6 +31357,15 @@ const checkPullRequestForConflicts = async (dependencies) => {
         const message = error instanceof Error ? error.message : 'An unknown error occurred';
         output.reportFailure(message);
     }
+};
+/**
+ * Check if a file should be checked for conflicts
+ */
+const shouldCheckFile = (file, excludePatterns) => {
+    if (isFileRemoved(file.status)) {
+        return false;
+    }
+    return !excludePatterns.some((pattern) => file.fileName.includes(pattern));
 };
 
 /**
@@ -31535,7 +31535,7 @@ async function run() {
     // Create GitHub API client
     const octokit = githubExports.getOctokit(token);
     // Create adapters and repositories
-    const output = createActionOutputAdapter();
+    const outputAdapter = createActionOutputAdapter();
     const pullRequestRepository = createGitHubPullRequestRepository(octokit);
     const fileContentRepository = createGitHubFileContentRepository(octokit);
     // Parse exclude patterns
@@ -31546,7 +31546,7 @@ async function run() {
     await checkPullRequestForConflicts({
         pullRequestRepository,
         fileContentRepository,
-        output,
+        output: outputAdapter,
         excludePatterns: excludePatternsArray
     });
 }
