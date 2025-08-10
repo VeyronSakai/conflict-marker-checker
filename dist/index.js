@@ -31323,19 +31323,19 @@ const checkPullRequestForConflicts = async (dependencies) => {
         coreExports.info(`Total files to check: ${files.length}`);
         // Check each file for conflicts
         const conflictedFiles = [];
-        for (let file of files) {
+        for (const file of files) {
             if (!shouldCheckFile(file, excludePatterns)) {
                 coreExports.info(`Skipping ${file.fileName} (matches exclude pattern)`);
                 continue;
             }
             const content = await fileContentRepository.getFileContent(pullRequest, file);
             if (content !== null) {
-                file = detectConflictsInFile(file, content);
-                if (file.hasConflicts()) {
+                const checkedFile = detectConflictsInFile(file, content);
+                if (checkedFile.hasConflicts()) {
                     const fileName = file.fileName;
                     conflictedFiles.push(fileName);
                     // Log conflict details
-                    for (const conflict of file.conflicts) {
+                    for (const conflict of checkedFile.conflicts) {
                         coreExports.error(`Conflict marker found in ${fileName} at line ${conflict.lineNumber}: ${conflict.content}`);
                     }
                 }

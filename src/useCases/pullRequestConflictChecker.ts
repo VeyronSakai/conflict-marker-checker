@@ -36,7 +36,7 @@ export const checkPullRequestForConflicts = async (dependencies: {
     // Check each file for conflicts
     const conflictedFiles: string[] = []
 
-    for (let file of files) {
+    for (const file of files) {
       if (!shouldCheckFile(file, excludePatterns)) {
         core.info(`Skipping ${file.fileName} (matches exclude pattern)`)
         continue
@@ -48,14 +48,14 @@ export const checkPullRequestForConflicts = async (dependencies: {
       )
 
       if (content !== null) {
-        file = detectConflictsInFile(file, content)
+        const checkedFile = detectConflictsInFile(file, content)
 
-        if (file.hasConflicts()) {
+        if (checkedFile.hasConflicts()) {
           const fileName = file.fileName
           conflictedFiles.push(fileName)
 
           // Log conflict details
-          for (const conflict of file.conflicts) {
+          for (const conflict of checkedFile.conflicts) {
             core.error(
               `Conflict marker found in ${fileName} at line ${conflict.lineNumber}: ${conflict.content}`
             )
