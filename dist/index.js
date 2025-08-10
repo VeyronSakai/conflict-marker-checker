@@ -31248,6 +31248,24 @@ const createConflictMarker = (lineNumber, content, markerType) => ({
 });
 
 /**
+ * Detect conflict markers from file content and update file
+ */
+const detectConflictsInFile = (file, content) => {
+    const lines = content.split('\n');
+    let updatedFile = file;
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (isConflictMarker(line)) {
+            const markerType = detectMarkerType(line);
+            if (markerType) {
+                const conflict = createConflictMarker(i + 1, line.trim(), markerType);
+                updatedFile = updatedFile.addConflict(conflict);
+            }
+        }
+    }
+    return updatedFile;
+};
+/**
  * Check if a line contains a conflict marker
  */
 const isConflictMarker = (line) => {
@@ -31265,24 +31283,6 @@ const detectMarkerType = (line) => {
         }
     }
     return null;
-};
-/**
- * Detect conflict markers from file content and update file
- */
-const detectConflictsInFile = (file, content) => {
-    const lines = content.split('\n');
-    let updatedFile = file;
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (isConflictMarker(line)) {
-            const markerType = detectMarkerType(line);
-            if (markerType) {
-                const conflict = createConflictMarker(i + 1, line.trim(), markerType);
-                updatedFile = updatedFile.addConflict(conflict);
-            }
-        }
-    }
-    return updatedFile;
 };
 
 const fileStatusFromString = (value) => {
@@ -31394,9 +31394,23 @@ const createFile = (fileName, status, conflicts = []) => ({
 });
 
 /**
+ * Waits for a number of milliseconds.
+ *
+ * @param milliseconds The number of milliseconds to wait.
+ * @returns Resolves with 'done!' after the wait is over.
+ */
+async function wait(milliseconds) {
+    return new Promise((resolve) => {
+        if (isNaN(milliseconds))
+            throw new Error('milliseconds is not a number');
+        setTimeout(() => resolve('done!'), milliseconds);
+    });
+}
+
+/**
  * Pull request repository implementation using GitHub API
  */
-const createGitHubPullRequestRepository = (octokit) => {
+const createPullRequestRepository = (octokit) => {
     const handleRateLimit = async (error, retries, maxRetries) => {
         if (error &&
             typeof error === 'object' &&
@@ -31470,13 +31484,13 @@ const createGitHubPullRequestRepository = (octokit) => {
                     // Add delay to avoid rate limits
                     if (page % 10 === 1 && page > 1) {
                         coreExports.debug('Adding delay to avoid rate limits...');
-                        await new Promise((resolve) => setTimeout(resolve, 200));
+                        await wait(200);
                     }
                     retries = 0;
                 }
                 catch (error) {
                     const waitTime = await handleRateLimit(error, retries, maxRetries);
-                    await new Promise((resolve) => setTimeout(resolve, waitTime));
+                    await wait(waitTime);
                     retries++;
                 }
             }
@@ -31485,7 +31499,7 @@ const createGitHubPullRequestRepository = (octokit) => {
     };
 };
 
-const createGitHubFileContentRepository = (octokit) => ({
+const createFileContentRepository = (octokit) => ({
     getFileContent: async (pullRequest, file) => {
         try {
             const { data: fileContent } = await octokit.rest.repos.getContent({
@@ -31536,8 +31550,8 @@ async function run() {
     const octokit = githubExports.getOctokit(token);
     // Create adapters and repositories
     const outputAdapter = createActionOutputAdapter();
-    const pullRequestRepository = createGitHubPullRequestRepository(octokit);
-    const fileContentRepository = createGitHubFileContentRepository(octokit);
+    const pullRequestRepository = createPullRequestRepository(octokit);
+    const fileContentRepository = createFileContentRepository(octokit);
     // Parse exclude patterns
     const excludePatternsArray = excludePatterns
         ? excludePatterns.split(',').map((p) => p.trim())

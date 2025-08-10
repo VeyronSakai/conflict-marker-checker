@@ -6,27 +6,6 @@ import {
 } from '../domains/conflictMarker.js'
 
 /**
- * Check if a line contains a conflict marker
- */
-const isConflictMarker = (line: string): boolean => {
-  const trimmedLine = line.trimStart()
-  return CONFLICT_MARKERS.some((marker) => trimmedLine.startsWith(marker))
-}
-
-/**
- * Detect the type of conflict marker in a line
- */
-const detectMarkerType = (line: string): MarkerType | null => {
-  const trimmedLine = line.trimStart()
-  for (const marker of CONFLICT_MARKERS) {
-    if (trimmedLine.startsWith(marker)) {
-      return marker
-    }
-  }
-  return null
-}
-
-/**
  * Detect conflict markers from file content and update file
  */
 export const detectConflictsInFile = (file: File, content: string): File => {
@@ -45,4 +24,25 @@ export const detectConflictsInFile = (file: File, content: string): File => {
   }
 
   return updatedFile
+}
+
+/**
+ * Check if a line contains a conflict marker
+ */
+const isConflictMarker = (line: string): boolean => {
+  const trimmedLine = line.trimStart()
+  return CONFLICT_MARKERS.some((marker) => trimmedLine.startsWith(marker))
+}
+
+/**
+ * Detect the type of conflict marker in a line
+ */
+const detectMarkerType = (line: string): MarkerType | null => {
+  const trimmedLine = line.trimStart()
+  for (const marker of CONFLICT_MARKERS) {
+    if (trimmedLine.startsWith(marker)) {
+      return marker
+    }
+  }
+  return null
 }

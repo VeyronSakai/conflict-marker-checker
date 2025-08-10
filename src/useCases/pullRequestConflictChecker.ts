@@ -1,6 +1,6 @@
 import * as core from '@actions/core'
 import type { PullRequestRepositoryPort } from '../domains/pullRequestRepositoryPort.js'
-import type { GitHubFileContentRepository } from '../infrastructures/gitHubFileContentRepository.js'
+import type { FileContentRepository } from '../infrastructures/fileContentRepository.js'
 import type { OutputPort } from '../domains/outputPort.js'
 import type { File } from '../domains/file.js'
 import { detectConflictsInFile } from './fileConflictChecker.js'
@@ -11,7 +11,7 @@ import { isFileRemoved } from '../domains/fileStatus.js'
  */
 export const checkPullRequestForConflicts = async (dependencies: {
   pullRequestRepository: PullRequestRepositoryPort
-  fileContentRepository: GitHubFileContentRepository
+  fileContentRepository: FileContentRepository
   output: OutputPort
   excludePatterns: string[]
 }): Promise<void> => {

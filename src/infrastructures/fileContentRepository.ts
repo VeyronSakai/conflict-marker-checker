@@ -6,16 +6,16 @@ import type { File } from '../domains/file.js'
 /**
  * File content repository implementation using GitHub API
  */
-export type GitHubFileContentRepository = {
+export type FileContentRepository = {
   getFileContent(
     pullRequest: PullRequestData,
     file: File
   ): Promise<string | null>
 }
 
-export const createGitHubFileContentRepository = (
+export const createFileContentRepository = (
   octokit: ReturnType<typeof github.getOctokit>
-): GitHubFileContentRepository => ({
+): FileContentRepository => ({
   getFileContent: async (
     pullRequest: PullRequestData,
     file: File

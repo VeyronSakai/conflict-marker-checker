@@ -1,8 +1,8 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import { checkPullRequestForConflicts } from '../useCases/pullRequestConflictChecker.js'
-import { createGitHubPullRequestRepository } from '../infrastructures/gitHubPullRequestRepository.js'
-import { createGitHubFileContentRepository } from '../infrastructures/gitHubFileContentRepository.js'
+import { createPullRequestRepository } from '../infrastructures/pullRequestRepository.js'
+import { createFileContentRepository } from '../infrastructures/fileContentRepository.js'
 import { createActionOutputAdapter } from '../infrastructures/actionOutputAdapter.js'
 
 /**
@@ -20,8 +20,8 @@ export async function run(): Promise<void> {
 
   // Create adapters and repositories
   const outputAdapter = createActionOutputAdapter()
-  const pullRequestRepository = createGitHubPullRequestRepository(octokit)
-  const fileContentRepository = createGitHubFileContentRepository(octokit)
+  const pullRequestRepository = createPullRequestRepository(octokit)
+  const fileContentRepository = createFileContentRepository(octokit)
 
   // Parse exclude patterns
   const excludePatternsArray = excludePatterns
