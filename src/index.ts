@@ -1,6 +1,6 @@
 /**
  * The entrypoint for the action.
  */
-import { run } from './presentations/main.js'
+import { run } from './main.js'
 
 void run()

@@ -1,9 +1,9 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
-import { checkPullRequestForConflicts } from '../useCases/pullRequestConflictChecker.js'
-import { createPullRequestRepository } from '../infrastructures/pullRequestRepository.js'
-import { createFileContentRepository } from '../infrastructures/fileContentRepository.js'
-import { createActionOutputAdapter } from '../infrastructures/actionOutputAdapter.js'
+import { checkPullRequestForConflicts } from './useCases/pullRequestConflictChecker.js'
+import { createPullRequestRepository } from './infrastructures/pullRequestRepository.js'
+import { createFileContentRepository } from './infrastructures/fileContentRepository.js'
+import { createActionOutputAdapter } from './infrastructures/actionOutputAdapter.js'
 
 /**
  * GitHub Action main entry point
