@@ -31235,151 +31235,179 @@ function requireGithub () {
 var githubExports = requireGithub();
 
 const OUTPUT_CONFLICTS = 'conflicts';
-/**
- * The main function for the action.
- *
- * @returns Resolves when the action is complete.
- */
-async function run() {
-    try {
-        const token = coreExports.getInput('github-token', { required: true });
-        const excludePatterns = coreExports.getInput('exclude-patterns') || '';
-        const octokit = githubExports.getOctokit(token);
-        const context = githubExports.context;
-        if (!context.payload.pull_request) {
-            coreExports.setFailed('This action can only be run on pull requests');
-            return;
+function validatePullRequestContext() {
+    const context = githubExports.context;
+    if (!context.payload.pull_request) {
+        throw new Error('This action can only be run on pull requests');
+    }
+    const { owner, repo } = context.repo;
+    const pull_number = context.payload.pull_request.number;
+    const head_sha = context.payload.pull_request.head.sha;
+    return { owner, repo, pull_number, head_sha };
+}
+async function handleRateLimit(error, retries, maxRetries) {
+    if (error &&
+        typeof error === 'object' &&
+        'status' in error &&
+        (error.status === 403 || error.status === 429)) {
+        if (retries >= maxRetries) {
+            throw new Error(`GitHub API rate limit exceeded after ${maxRetries} retries`);
         }
-        const { owner, repo } = context.repo;
-        const pull_number = context.payload.pull_request.number;
-        coreExports.info(`Checking PR #${pull_number} for conflict markers...`);
-        // Fetch all files with pagination
-        const allFiles = [];
-        let page = 1;
-        const perPage = 100;
-        let retries = 0;
-        const maxRetries = 3;
-        while (true) {
-            try {
-                const response = await octokit.rest.pulls.listFiles({
-                    owner,
-                    repo,
-                    pull_number,
-                    per_page: perPage,
-                    page
-                });
-                // Check rate limit headers
-                const remaining = parseInt(response.headers['x-ratelimit-remaining'] || '0');
-                const reset = parseInt(response.headers['x-ratelimit-reset'] || '0');
-                if (remaining < 100) {
-                    coreExports.warning(`Low API rate limit: ${remaining} requests remaining. Reset at ${new Date(reset * 1000).toISOString()}`);
-                }
-                allFiles.push(...response.data);
-                if (response.data.length < perPage) {
-                    break;
-                }
-                page++;
-                coreExports.info(`Fetched ${allFiles.length} files so far...`);
-                // Add small delay every 10 pages to avoid secondary rate limits
-                if (page % 10 === 1 && page > 1) {
-                    coreExports.debug('Adding delay to avoid rate limits...');
-                    await new Promise((resolve) => setTimeout(resolve, 200));
-                }
-                // Reset retry counter on success
-                retries = 0;
-            }
-            catch (error) {
-                if (error &&
-                    typeof error === 'object' &&
-                    'status' in error &&
-                    (error.status === 403 || error.status === 429)) {
-                    if (retries >= maxRetries) {
-                        throw new Error(`GitHub API rate limit exceeded after ${maxRetries} retries`);
-                    }
-                    const errorWithResponse = error;
-                    const retryAfter = errorWithResponse.response?.headers?.['retry-after'];
-                    const resetTime = errorWithResponse.response?.headers?.['x-ratelimit-reset'];
-                    let waitTime = 60000; // Default 1 minute
-                    if (retryAfter) {
-                        waitTime = parseInt(retryAfter) * 1000;
-                    }
-                    else if (resetTime) {
-                        waitTime = Math.max(parseInt(resetTime) * 1000 - Date.now(), 1000);
-                    }
-                    else {
-                        // Exponential backoff for secondary rate limits
-                        waitTime = Math.min(60000 * Math.pow(2, retries), 300000);
-                    }
-                    coreExports.warning(`Rate limited. Waiting ${waitTime / 1000} seconds before retry ${retries + 1}/${maxRetries}...`);
-                    await new Promise((resolve) => setTimeout(resolve, waitTime));
-                    retries++;
-                }
-                else {
-                    throw error;
-                }
-            }
+        const errorWithResponse = error;
+        const retryAfter = errorWithResponse.response?.headers?.['retry-after'];
+        const resetTime = errorWithResponse.response?.headers?.['x-ratelimit-reset'];
+        let waitTime = 60000; // Default 1 minute
+        if (retryAfter) {
+            waitTime = parseInt(retryAfter) * 1000;
         }
-        coreExports.info(`Total files to check: ${allFiles.length}`);
-        const conflictMarkers = ['<<<<<<<', '>>>>>>>', '======='];
-        const filesWithConflicts = [];
-        const excludeList = excludePatterns
-            ? excludePatterns.split(',').map((p) => p.trim())
-            : [];
-        for (const file of allFiles) {
-            if (file.status === 'removed')
-                continue;
-            // Skip files matching exclude patterns
-            if (excludeList.some((pattern) => file.filename.includes(pattern))) {
-                coreExports.info(`Skipping ${file.filename} (matches exclude pattern)`);
-                continue;
-            }
-            try {
-                const { data: fileContent } = await octokit.rest.repos.getContent({
-                    owner,
-                    repo,
-                    path: file.filename,
-                    ref: context.payload.pull_request.head.sha
-                });
-                if ('content' in fileContent &&
-                    typeof fileContent.content === 'string') {
-                    const content = Buffer.from(fileContent.content, 'base64').toString();
-                    const lines = content.split('\n');
-                    let conflictFound = false;
-                    for (let i = 0; i < lines.length; i++) {
-                        const line = lines[i];
-                        for (const marker of conflictMarkers) {
-                            // Check if the marker appears at the beginning of the line (with optional whitespace)
-                            // This is how Git actually places conflict markers
-                            if (line.trimStart().startsWith(marker)) {
-                                if (!conflictFound) {
-                                    filesWithConflicts.push(file.filename);
-                                    conflictFound = true;
-                                }
-                                coreExports.error(`Conflict marker found in ${file.filename} at line ${i + 1}: ${line.trim()}`);
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-            catch (error) {
-                coreExports.warning(`Could not check file ${file.filename}: ${error}`);
-            }
-        }
-        if (filesWithConflicts.length > 0) {
-            coreExports.setFailed(`Found conflict markers in ${filesWithConflicts.length} file(s)`);
-            coreExports.setOutput(OUTPUT_CONFLICTS, 'true');
-            coreExports.setOutput('conflicted-files', filesWithConflicts.join(','));
+        else if (resetTime) {
+            waitTime = Math.max(parseInt(resetTime) * 1000 - Date.now(), 1000);
         }
         else {
-            coreExports.info('No conflict markers found!');
-            coreExports.setOutput(OUTPUT_CONFLICTS, 'false');
-            coreExports.setOutput('conflicted-files', '');
+            // Exponential backoff for secondary rate limits
+            waitTime = Math.min(60000 * Math.pow(2, retries), 300000);
+        }
+        coreExports.warning(`Rate limited. Waiting ${waitTime / 1000} seconds before retry ${retries + 1}/${maxRetries}...`);
+        return waitTime;
+    }
+    throw error;
+}
+async function fetchPullRequestFiles(octokit, owner, repo, pull_number) {
+    const allFiles = [];
+    let page = 1;
+    const perPage = 100;
+    let retries = 0;
+    const maxRetries = 3;
+    while (true) {
+        try {
+            const response = await octokit.rest.pulls.listFiles({
+                owner,
+                repo,
+                pull_number,
+                per_page: perPage,
+                page
+            });
+            // Check rate limit headers
+            const remaining = parseInt(response.headers['x-ratelimit-remaining'] || '0');
+            const reset = parseInt(response.headers['x-ratelimit-reset'] || '0');
+            if (remaining < 100) {
+                coreExports.warning(`Low API rate limit: ${remaining} requests remaining. Reset at ${new Date(reset * 1000).toISOString()}`);
+            }
+            allFiles.push(...response.data);
+            if (response.data.length < perPage) {
+                break;
+            }
+            page++;
+            coreExports.info(`Fetched ${allFiles.length} files so far...`);
+            // Add small delay every 10 pages to avoid secondary rate limits
+            if (page % 10 === 1 && page > 1) {
+                coreExports.debug('Adding delay to avoid rate limits...');
+                await new Promise((resolve) => setTimeout(resolve, 200));
+            }
+            // Reset retry counter on success
+            retries = 0;
+        }
+        catch (error) {
+            const waitTime = await handleRateLimit(error, retries, maxRetries);
+            await new Promise((resolve) => setTimeout(resolve, waitTime));
+            retries++;
+        }
+    }
+    return allFiles;
+}
+function shouldCheckFile(file, excludePatterns) {
+    if (file.status === 'removed') {
+        return false;
+    }
+    const excludeList = excludePatterns
+        ? excludePatterns.split(',').map((p) => p.trim())
+        : [];
+    if (excludeList.some((pattern) => file.filename.includes(pattern))) {
+        coreExports.info(`Skipping ${file.filename} (matches exclude pattern)`);
+        return false;
+    }
+    return true;
+}
+async function checkFileForConflicts(octokit, file, owner, repo, ref) {
+    const conflictMarkers = ['<<<<<<<', '>>>>>>>', '======='];
+    try {
+        const { data: fileContent } = await octokit.rest.repos.getContent({
+            owner,
+            repo,
+            path: file.filename,
+            ref
+        });
+        if ('content' in fileContent && typeof fileContent.content === 'string') {
+            const content = Buffer.from(fileContent.content, 'base64').toString();
+            const lines = content.split('\n');
+            const conflicts = [];
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                for (const marker of conflictMarkers) {
+                    // Check if the marker appears at the beginning of the line (with optional whitespace)
+                    // This is how Git actually places conflict markers
+                    if (line.trimStart().startsWith(marker)) {
+                        conflicts.push({ line: i + 1, content: line.trim() });
+                        coreExports.error(`Conflict marker found in ${file.filename} at line ${i + 1}: ${line.trim()}`);
+                        break;
+                    }
+                }
+            }
+            if (conflicts.length > 0) {
+                return { filename: file.filename, conflicts };
+            }
         }
     }
     catch (error) {
-        if (error instanceof Error)
+        coreExports.warning(`Could not check file ${file.filename}: ${error}`);
+    }
+    return null;
+}
+function setActionOutputs(filesWithConflicts) {
+    if (filesWithConflicts.length > 0) {
+        coreExports.setFailed(`Found conflict markers in ${filesWithConflicts.length} file(s)`);
+        coreExports.setOutput(OUTPUT_CONFLICTS, 'true');
+        coreExports.setOutput('conflicted-files', filesWithConflicts.join(','));
+    }
+    else {
+        coreExports.info('No conflict markers found!');
+        coreExports.setOutput(OUTPUT_CONFLICTS, 'false');
+        coreExports.setOutput('conflicted-files', '');
+    }
+}
+async function run() {
+    try {
+        // Get inputs
+        const token = coreExports.getInput('github-token', { required: true });
+        const excludePatterns = coreExports.getInput('exclude-patterns') || '';
+        const octokit = githubExports.getOctokit(token);
+        // Validate PR context
+        const { owner, repo, pull_number, head_sha } = validatePullRequestContext();
+        coreExports.info(`Checking PR #${pull_number} for conflict markers...`);
+        // Fetch all PR files with pagination and rate limit handling
+        const allFiles = await fetchPullRequestFiles(octokit, owner, repo, pull_number);
+        coreExports.info(`Total files to check: ${allFiles.length}`);
+        // Check each file for conflicts
+        const filesWithConflicts = [];
+        for (const file of allFiles) {
+            if (!shouldCheckFile(file, excludePatterns)) {
+                continue;
+            }
+            const conflictResult = await checkFileForConflicts(octokit, file, owner, repo, head_sha);
+            if (conflictResult) {
+                filesWithConflicts.push(conflictResult.filename);
+            }
+        }
+        // Set outputs based on results
+        setActionOutputs(filesWithConflicts);
+    }
+    catch (error) {
+        if (error instanceof Error) {
             coreExports.setFailed(error.message);
+        }
+        else {
+            coreExports.setFailed('An unknown error occurred');
+        }
     }
 }
 
@@ -31388,5 +31416,5 @@ async function run() {
  * main logic.
  */
 /* istanbul ignore next */
-run();
+await run();
 //# sourceMappingURL=index.js.map
