@@ -23,7 +23,7 @@ jest.unstable_mockModule('@actions/github', () => github)
 
 // The module being tested should be imported dynamically. This ensures that the
 // mocks are used in place of any actual dependencies.
-const { run } = await import('../src/main.js')
+const { run } = await import('../src/presentations/main.js')
 
 describe('main.ts', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

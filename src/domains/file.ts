@@ -1,0 +1,31 @@
+import type { FileStatus } from './fileStatus.js'
+import type { ConflictMarker } from './conflictMarker.js'
+
+/**
+ * File type definition
+ */
+export type File = {
+  readonly fileName: string
+  readonly status: FileStatus
+  readonly conflicts: ConflictMarker[]
+  readonly hasConflicts: () => boolean
+  readonly addConflict: (conflict: ConflictMarker) => File
+}
+
+/**
+ * Create a File instance
+ */
+export const createFile = (
+  fileName: string,
+  status: FileStatus,
+  conflicts: ConflictMarker[] = []
+): File => ({
+  fileName,
+  status,
+  conflicts,
+  hasConflicts: () => conflicts.length > 0,
+  addConflict: (conflict: ConflictMarker) => {
+    const newConflicts = [...conflicts, conflict]
+    return createFile(fileName, status, newConflicts)
+  }
+})
