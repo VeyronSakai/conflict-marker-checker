@@ -31268,7 +31268,7 @@ const checkPullRequestForConflicts = async (dependencies) => {
         const pullRequest = pullRequestRepository.getCurrentPullRequest();
         coreExports.info(`Checking PR ${pullRequest.getIdentifier()} for conflict markers...`);
         // Fetch file list
-        const files = await pullRequestRepository.fetchFiles(pullRequest);
+        const files = await pullRequestRepository.getFiles(pullRequest);
         coreExports.info(`Total files to check: ${files.length}`);
         // Check each file for conflicts
         const conflictedFiles = [];
@@ -31278,11 +31278,11 @@ const checkPullRequestForConflicts = async (dependencies) => {
                 continue;
             }
             // Files already have conflicts detected by fetchFiles
-            if (file.hasConflicts()) {
+            if (file.hasConflictMarkers()) {
                 const fileName = file.fileName;
                 conflictedFiles.push(fileName);
                 // Log conflict details
-                for (const conflict of file.conflicts) {
+                for (const conflict of file.conflictMarkers) {
                     coreExports.error(`Conflict marker found in ${fileName}: ${conflict.content}`);
                 }
             }
@@ -31328,12 +31328,12 @@ const createPullRequestData = (owner, repo, pullNumber, headSha) => ({
 /**
  * Create a File instance
  */
-const createFile = (fileName, status, patch, conflicts = []) => ({
+const createFile = (fileName, status, patch, conflictMarkers = []) => ({
     fileName,
     status,
     patch,
-    conflicts,
-    hasConflicts: () => conflicts.length > 0
+    conflictMarkers: conflictMarkers,
+    hasConflictMarkers: () => conflictMarkers.length > 0
 });
 
 /**
@@ -31364,16 +31364,86 @@ async function wait(milliseconds) {
 }
 
 /**
+ * Pull request repository implementation using GitHub API
+ */
+const createPullRequestRepository = (octokit, getFileContent) => {
+    return {
+        getCurrentPullRequest: () => {
+            const context = githubExports.context;
+            if (!context.payload.pull_request) {
+                throw new Error('This action can only be run on pull requests');
+            }
+            const { owner, repo } = context.repo;
+            const pullNumber = context.payload.pull_request.number;
+            const headSha = context.payload.pull_request.head.sha;
+            return createPullRequestData(owner, repo, pullNumber, headSha);
+        },
+        getFiles: async (pullRequest) => {
+            const allFiles = [];
+            let page = 1;
+            const perPage = 100;
+            let retries = 0;
+            const maxRetries = 3;
+            while (true) {
+                try {
+                    const response = await octokit.rest.pulls.listFiles({
+                        owner: pullRequest.owner,
+                        repo: pullRequest.repo,
+                        pull_number: pullRequest.pullNumber,
+                        per_page: perPage,
+                        page
+                    });
+                    // Rate limit check
+                    const remaining = parseInt(response.headers['x-ratelimit-remaining'] || '0');
+                    const reset = parseInt(response.headers['x-ratelimit-reset'] || '0');
+                    if (remaining < 100) {
+                        coreExports.warning(`Low API rate limit: ${remaining} requests remaining. Reset at ${new Date(reset * 1000).toISOString()}`);
+                    }
+                    // Convert to domain entities and detect conflicts
+                    for (const fileData of response.data) {
+                        const fileName = fileData.filename;
+                        const status = fileStatusFromString(fileData.status);
+                        const patch = fileData.patch;
+                        const conflictMarkers = await getConflictMarkers(fileName, status, patch, pullRequest, getFileContent);
+                        const file = createFile(fileName, status, patch, conflictMarkers);
+                        allFiles.push(file);
+                    }
+                    if (response.data.length < perPage) {
+                        break;
+                    }
+                    page++;
+                    coreExports.info(`Fetched ${allFiles.length} files so far...`);
+                    // Add delay to avoid rate limits
+                    if (page % 10 === 1 && page > 1) {
+                        coreExports.debug('Adding delay to avoid rate limits...');
+                        await wait(200);
+                    }
+                    retries = 0;
+                }
+                catch (error) {
+                    if (retries >= maxRetries) {
+                        throw new Error(`GitHub API request failed after ${maxRetries} retries: ${error}`);
+                    }
+                    const waitTime = await handleRateLimit(error);
+                    await wait(waitTime);
+                    retries++;
+                }
+            }
+            return allFiles;
+        }
+    };
+};
+/**
  * Check if a line contains a conflict marker
  */
-const isConflictMarker = (line) => {
+const containsConflictMarker = (line) => {
     const trimmedLine = line.trimStart();
     return CONFLICT_MARKERS.some((marker) => trimmedLine.startsWith(marker));
 };
 /**
- * Detect the type of conflict marker in a line
+ * Get the type of conflict marker in a line
  */
-const detectMarkerType = (line) => {
+const getMarkerType = (line) => {
     const trimmedLine = line.trimStart();
     for (const marker of CONFLICT_MARKERS) {
         if (trimmedLine.startsWith(marker)) {
@@ -31383,9 +31453,9 @@ const detectMarkerType = (line) => {
     return null;
 };
 /**
- * Detect conflict markers from patch content (only added lines)
+ * Get conflict markers from patch content (only added lines)
  */
-const detectConflictsInPatch = (patch) => {
+const getConflictMarkersInPatch = (patch) => {
     const lines = patch.split('\n');
     const conflicts = [];
     for (let i = 0; i < lines.length; i++) {
@@ -31395,8 +31465,8 @@ const detectConflictsInPatch = (patch) => {
         if (line.startsWith('+') && !line.startsWith('+++')) {
             // Remove the '+' prefix and check for conflict markers
             const lineContent = line.substring(1);
-            if (isConflictMarker(lineContent)) {
-                const markerType = detectMarkerType(lineContent);
+            if (containsConflictMarker(lineContent)) {
+                const markerType = getMarkerType(lineContent);
                 if (markerType) {
                     // Note: line number is not meaningful in patch context
                     const conflict = createConflictMarker(0, lineContent.trim(), markerType);
@@ -31408,31 +31478,31 @@ const detectConflictsInPatch = (patch) => {
     return conflicts;
 };
 /**
- * Detect conflict markers from file content
+ * Get conflict markers from file content
  */
-const detectConflictsInContent = (content) => {
+const getConflictMarkersInContent = (content) => {
     const lines = content.split('\n');
-    const conflicts = [];
+    const conflictMarkers = [];
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        if (isConflictMarker(line)) {
-            const markerType = detectMarkerType(line);
+        if (containsConflictMarker(line)) {
+            const markerType = getMarkerType(line);
             if (markerType) {
-                const conflict = createConflictMarker(i + 1, line.trim(), markerType);
-                conflicts.push(conflict);
+                const conflictMarker = createConflictMarker(i + 1, line.trim(), markerType);
+                conflictMarkers.push(conflictMarker);
             }
         }
     }
-    return conflicts;
+    return conflictMarkers;
 };
 /**
  * Detect conflicts in a file using patch or full content
  */
-const detectConflicts = async (fileName, status, patch, pullRequest, getFileContent) => {
+const getConflictMarkers = async (fileName, status, patch, pullRequest, getFileContent) => {
     // Check conflicts - use patch if available, otherwise fetch full content
     if (patch) {
         // Use patch for small/medium files (patch is available)
-        return detectConflictsInPatch(patch);
+        return getConflictMarkersInPatch(patch);
     }
     else if (getFileContent) {
         // For large files where patch is empty, fetch full content
@@ -31440,7 +31510,7 @@ const detectConflicts = async (fileName, status, patch, pullRequest, getFileCont
         const tempFile = createFile(fileName, status, patch);
         const content = await getFileContent(pullRequest, tempFile);
         if (content) {
-            return detectConflictsInContent(content);
+            return getConflictMarkersInContent(content);
         }
         else {
             coreExports.warning(`Could not fetch content for ${fileName}`);
@@ -31474,76 +31544,6 @@ const handleRateLimit = async (error) => {
         return waitTime;
     }
     throw error;
-};
-/**
- * Pull request repository implementation using GitHub API
- */
-const createPullRequestRepository = (octokit, getFileContent) => {
-    return {
-        getCurrentPullRequest: () => {
-            const context = githubExports.context;
-            if (!context.payload.pull_request) {
-                throw new Error('This action can only be run on pull requests');
-            }
-            const { owner, repo } = context.repo;
-            const pullNumber = context.payload.pull_request.number;
-            const headSha = context.payload.pull_request.head.sha;
-            return createPullRequestData(owner, repo, pullNumber, headSha);
-        },
-        fetchFiles: async (pullRequest) => {
-            const allFiles = [];
-            let page = 1;
-            const perPage = 100;
-            let retries = 0;
-            const maxRetries = 3;
-            while (true) {
-                try {
-                    const response = await octokit.rest.pulls.listFiles({
-                        owner: pullRequest.owner,
-                        repo: pullRequest.repo,
-                        pull_number: pullRequest.pullNumber,
-                        per_page: perPage,
-                        page
-                    });
-                    // Rate limit check
-                    const remaining = parseInt(response.headers['x-ratelimit-remaining'] || '0');
-                    const reset = parseInt(response.headers['x-ratelimit-reset'] || '0');
-                    if (remaining < 100) {
-                        coreExports.warning(`Low API rate limit: ${remaining} requests remaining. Reset at ${new Date(reset * 1000).toISOString()}`);
-                    }
-                    // Convert to domain entities and detect conflicts
-                    for (const fileData of response.data) {
-                        const fileName = fileData.filename;
-                        const status = fileStatusFromString(fileData.status);
-                        const patch = fileData.patch;
-                        const conflicts = await detectConflicts(fileName, status, patch, pullRequest, getFileContent);
-                        const file = createFile(fileName, status, patch, conflicts);
-                        allFiles.push(file);
-                    }
-                    if (response.data.length < perPage) {
-                        break;
-                    }
-                    page++;
-                    coreExports.info(`Fetched ${allFiles.length} files so far...`);
-                    // Add delay to avoid rate limits
-                    if (page % 10 === 1 && page > 1) {
-                        coreExports.debug('Adding delay to avoid rate limits...');
-                        await wait(200);
-                    }
-                    retries = 0;
-                }
-                catch (error) {
-                    if (retries >= maxRetries) {
-                        throw new Error(`GitHub API request failed after ${maxRetries} retries: ${error}`);
-                    }
-                    const waitTime = await handleRateLimit(error);
-                    await wait(waitTime);
-                    retries++;
-                }
-            }
-            return allFiles;
-        }
-    };
 };
 
 const createFileContentRepository = (octokit) => ({
