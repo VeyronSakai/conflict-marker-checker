@@ -190,6 +190,19 @@ This action:
 4. Reports any files containing these markers
 5. Fails the workflow if conflicts are detected
 
+## Limitations
+
+- **Git LFS Files**: Conflict markers in Git LFS-managed files cannot be
+  detected by default. This is due to a known Git LFS issue
+  ([git-lfs/git-lfs#6006](https://github.com/git-lfs/git-lfs/pull/6006)) where
+  LFS pointer files are returned instead of actual file content when conflicts
+  occur.
+
+- **Custom Conflict Markers**: This action may not detect conflicts if you have
+  customized Git's conflict marker style or size through `merge.conflictStyle`
+  or `merge.conflictMarkerSize` settings. The action only detects the standard
+  7-character conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`).
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
