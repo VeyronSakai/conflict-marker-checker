@@ -507,6 +507,100 @@ describe('main.ts', () => {
     )
   })
 
+  it('Ignores conflict markers in deleted lines', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock PR files with patch containing conflict markers only in deleted lines
+    mockOctokit.rest.pulls.listFiles.mockResolvedValue({
+      data: [
+        {
+          filename: 'test.js',
+          status: 'modified',
+          patch: `@@ -1,7 +1,3 @@
+ function test() {
+-<<<<<<< HEAD
+-  const x = 1;
+-=======
+-  const x = 2;
+->>>>>>> branch
++  const x = 3;
+   return x;
+ }`
+        }
+      ],
+      headers: {
+        'x-ratelimit-remaining': '900',
+        'x-ratelimit-reset': '9999999999'
+      }
+    })
+
+    await run()
+
+    // Should NOT detect conflict markers in deleted lines
+    expect(core.error).not.toHaveBeenCalled()
+    expect(core.info).toHaveBeenCalledWith('No conflict markers found!')
+    expect(core.setOutput).toHaveBeenCalledWith('conflicts', 'false')
+    expect(core.setOutput).toHaveBeenCalledWith('conflicted-files', '')
+    expect(core.setFailed).not.toHaveBeenCalled()
+  })
+
+  it('Detects conflicts in added lines but ignores in deleted lines', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock PR files with conflict markers in both added and deleted lines
+    mockOctokit.rest.pulls.listFiles.mockResolvedValue({
+      data: [
+        {
+          filename: 'test.js',
+          status: 'modified',
+          patch: `@@ -1,7 +1,7 @@
+ function test() {
+-<<<<<<< HEAD
+-  const x = 1;
+-=======
+-  const x = 2;
+->>>>>>> old-branch
++  const x = 3;
++<<<<<<< HEAD
++  const y = 4;
++=======
++  const y = 5;
++>>>>>>> new-branch
+   return x + y;
+ }`
+        }
+      ],
+      headers: {
+        'x-ratelimit-remaining': '900',
+        'x-ratelimit-reset': '9999999999'
+      }
+    })
+
+    await run()
+
+    // Should detect conflict markers only in added lines
+    expect(core.error).toHaveBeenCalledWith(
+      expect.stringContaining('Conflict marker found in test.js')
+    )
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Found conflict markers in 1 file(s)')
+    )
+    // Should detect exactly 3 conflict markers (from added lines only)
+    expect(core.error).toHaveBeenCalledTimes(3)
+  })
+
   it('Handles conflict markers with leading whitespace', async () => {
     // Set context with pull_request
     github.context.payload = {
