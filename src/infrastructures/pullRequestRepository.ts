@@ -108,7 +108,7 @@ export const createPullRequestRepository = (
             )
           }
 
-          const waitTime = await handleRateLimit(error)
+          const waitTime = await getWaitTime(error)
           await wait(waitTime)
           retries++
         }
@@ -231,9 +231,9 @@ const getConflictMarkers = async (
 }
 
 /**
- * Handle rate limit errors from GitHub API
+ * Get wait time for rate limit errors from GitHub API
  */
-const handleRateLimit = async (error: unknown): Promise<number> => {
+const getWaitTime = async (error: unknown): Promise<number> => {
   if (
     error &&
     typeof error === 'object' &&
