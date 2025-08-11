@@ -83,7 +83,13 @@ export const createPullRequestRepository = (
 
           retries = 0
         } catch (error: unknown) {
-          const waitTime = await handleRateLimit(error, retries, maxRetries)
+          if (retries >= maxRetries) {
+            throw new Error(
+              `GitHub API request failed after ${maxRetries} retries: ${error}`
+            )
+          }
+
+          const waitTime = await handleRateLimit(error)
           await wait(waitTime)
           retries++
         }
@@ -94,41 +100,32 @@ export const createPullRequestRepository = (
   }
 }
 
-const handleRateLimit = async (
-  error: unknown,
-  retries: number,
-  maxRetries: number
-): Promise<number> => {
+const handleRateLimit = async (error: unknown): Promise<number> => {
   if (
     error &&
     typeof error === 'object' &&
     'status' in error &&
     (error.status === 403 || error.status === 429)
   ) {
-    if (retries >= maxRetries) {
-      throw new Error(
-        `GitHub API rate limit exceeded after ${maxRetries} retries`
-      )
-    }
-
     const errorWithResponse = error as {
       response?: { headers?: { [key: string]: string } }
     }
     const retryAfter = errorWithResponse.response?.headers?.['retry-after']
     const resetTime = errorWithResponse.response?.headers?.['x-ratelimit-reset']
 
-    let waitTime = 60000 // Default 1 minute
+    let waitTime: number
 
     if (retryAfter) {
       waitTime = parseInt(retryAfter) * 1000
     } else if (resetTime) {
       waitTime = Math.max(parseInt(resetTime) * 1000 - Date.now(), 1000)
     } else {
-      waitTime = Math.min(60000 * Math.pow(2, retries), 300000)
+      // Default wait time
+      waitTime = 60000
     }
 
     core.warning(
-      `Rate limited. Waiting ${waitTime / 1000} seconds before retry ${retries + 1}/${maxRetries}...`
+      `Rate limited. Waiting ${waitTime / 1000} seconds before retry...`
     )
 
     return waitTime

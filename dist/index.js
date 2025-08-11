@@ -31507,7 +31507,10 @@ const createPullRequestRepository = (octokit) => {
                     retries = 0;
                 }
                 catch (error) {
-                    const waitTime = await handleRateLimit(error, retries, maxRetries);
+                    if (retries >= maxRetries) {
+                        throw new Error(`GitHub API request failed after ${maxRetries} retries: ${error}`);
+                    }
+                    const waitTime = await handleRateLimit(error);
                     await wait(waitTime);
                     retries++;
                 }
@@ -31516,18 +31519,15 @@ const createPullRequestRepository = (octokit) => {
         }
     };
 };
-const handleRateLimit = async (error, retries, maxRetries) => {
+const handleRateLimit = async (error) => {
     if (error &&
         typeof error === 'object' &&
         'status' in error &&
         (error.status === 403 || error.status === 429)) {
-        if (retries >= maxRetries) {
-            throw new Error(`GitHub API rate limit exceeded after ${maxRetries} retries`);
-        }
         const errorWithResponse = error;
         const retryAfter = errorWithResponse.response?.headers?.['retry-after'];
         const resetTime = errorWithResponse.response?.headers?.['x-ratelimit-reset'];
-        let waitTime = 60000; // Default 1 minute
+        let waitTime;
         if (retryAfter) {
             waitTime = parseInt(retryAfter) * 1000;
         }
@@ -31535,9 +31535,10 @@ const handleRateLimit = async (error, retries, maxRetries) => {
             waitTime = Math.max(parseInt(resetTime) * 1000 - Date.now(), 1000);
         }
         else {
-            waitTime = Math.min(60000 * Math.pow(2, retries), 300000);
+            // Default wait time
+            waitTime = 60000;
         }
-        coreExports.warning(`Rate limited. Waiting ${waitTime / 1000} seconds before retry ${retries + 1}/${maxRetries}...`);
+        coreExports.warning(`Rate limited. Waiting ${waitTime / 1000} seconds before retry...`);
         return waitTime;
     }
     throw error;
