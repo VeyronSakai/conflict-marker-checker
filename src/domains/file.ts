@@ -24,6 +24,6 @@ export const createFile = (
   fileName,
   status,
   patch,
-  conflictMarkers: conflictMarkers,
+  conflictMarkers,
   hasConflictMarkers: () => conflictMarkers.length > 0
 })
