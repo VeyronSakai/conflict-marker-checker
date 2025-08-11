@@ -22,7 +22,7 @@ export const createPullRequestRepository = (
   octokit: ReturnType<typeof github.getOctokit>,
   getFileContent?: (
     pullRequest: PullRequestData,
-    file: File
+    fileName: string
   ) => Promise<string | null>
 ): PullRequestRepositoryPort => {
   return {
@@ -209,7 +209,7 @@ const getConflictMarkers = async (
   pullRequest: PullRequestData,
   getFileContent?: (
     pullRequest: PullRequestData,
-    file: File
+    fileName: string
   ) => Promise<string | null>
 ): Promise<ConflictMarker[]> => {
   // Check conflicts - use patch if available, otherwise fetch full content
@@ -219,8 +219,7 @@ const getConflictMarkers = async (
   } else if (getFileContent) {
     // For large files where patch is empty, fetch full content
     core.info(`Patch not available for ${fileName}, fetching full content...`)
-    const tempFile = createFile(fileName, status, patch)
-    const content = await getFileContent(pullRequest, tempFile)
+    const content = await getFileContent(pullRequest, fileName)
 
     if (content) {
       return getConflictMarkersInContent(content)

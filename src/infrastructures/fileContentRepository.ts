@@ -1,7 +1,6 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import type { PullRequestData } from '../domains/pullRequestData.js'
-import type { File } from '../domains/file.js'
 
 /**
  * File content repository implementation using GitHub API
@@ -9,7 +8,7 @@ import type { File } from '../domains/file.js'
 export type FileContentRepository = {
   getFileContent(
     pullRequest: PullRequestData,
-    file: File
+    fileName: string
   ): Promise<string | null>
 }
 
@@ -18,13 +17,13 @@ export const createFileContentRepository = (
 ): FileContentRepository => ({
   getFileContent: async (
     pullRequest: PullRequestData,
-    file: File
+    fileName: string
   ): Promise<string | null> => {
     try {
       const { data: fileContent } = await octokit.rest.repos.getContent({
         owner: pullRequest.owner,
         repo: pullRequest.repo,
-        path: file.fileName,
+        path: fileName,
         ref: pullRequest.headSha
       })
 
@@ -34,7 +33,7 @@ export const createFileContentRepository = (
 
       return null
     } catch (error) {
-      core.warning(`Could not check file ${file.fileName}: ${error}`)
+      core.warning(`Could not check file ${fileName}: ${error}`)
       return null
     }
   }
