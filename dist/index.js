@@ -31332,7 +31332,7 @@ const createFile = (fileName, status, patch, conflictMarkers = []) => ({
     fileName,
     status,
     patch,
-    conflictMarkers: conflictMarkers,
+    conflictMarkers,
     hasConflictMarkers: () => conflictMarkers.length > 0
 });
 
@@ -31468,7 +31468,9 @@ const getConflictMarkersInPatch = (patch) => {
             if (containsConflictMarker(lineContent)) {
                 const markerType = getMarkerType(lineContent);
                 if (markerType) {
-                    // Note: line number is not meaningful in patch context
+                    // In patch context, the actual line number in the original file is not available.
+                    // We use '0' as a sentinel value to indicate that the line number is unknown or not applicable.
+                    // Consumers of ConflictMarker should treat line number '0' as "unknown" in this context.
                     const conflict = createConflictMarker(0, lineContent.trim(), markerType);
                     conflicts.push(conflict);
                 }
@@ -31521,7 +31523,7 @@ const getConflictMarkers = async (fileName, status, patch, pullRequest, getFileC
 /**
  * Get wait time for rate limit errors from GitHub API
  */
-const getWaitTime = async (error) => {
+const getWaitTime = (error) => {
     if (error &&
         typeof error === 'object' &&
         'status' in error &&
