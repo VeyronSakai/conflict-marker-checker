@@ -1,8 +1,10 @@
 import type { File } from '../domains/file.js'
+import { createFile } from '../domains/file.js'
 import {
   CONFLICT_MARKERS,
   type MarkerType,
-  createConflictMarker
+  createConflictMarker,
+  type ConflictMarker
 } from '../domains/conflictMarker.js'
 
 /**
@@ -10,7 +12,7 @@ import {
  */
 export const detectConflictsInFile = (file: File, content: string): File => {
   const lines = content.split('\n')
-  let updatedFile = file
+  const conflicts: ConflictMarker[] = []
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -18,12 +20,12 @@ export const detectConflictsInFile = (file: File, content: string): File => {
       const markerType = detectMarkerType(line)
       if (markerType) {
         const conflict = createConflictMarker(i + 1, line.trim(), markerType)
-        updatedFile = updatedFile.addConflict(conflict)
+        conflicts.push(conflict)
       }
     }
   }
 
-  return updatedFile
+  return createFile(file.fileName, file.status, file.patch, conflicts)
 }
 
 /**
@@ -56,7 +58,7 @@ export const detectConflictsInPatch = (file: File): File => {
   }
 
   const lines = file.patch.split('\n')
-  let updatedFile = file
+  const conflicts: ConflictMarker[] = []
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
@@ -74,11 +76,11 @@ export const detectConflictsInPatch = (file: File): File => {
             lineContent.trim(),
             markerType
           )
-          updatedFile = updatedFile.addConflict(conflict)
+          conflicts.push(conflict)
         }
       }
     }
   }
 
-  return updatedFile
+  return createFile(file.fileName, file.status, file.patch, conflicts)
 }

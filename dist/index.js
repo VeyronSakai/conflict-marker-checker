@@ -31235,6 +31235,17 @@ function requireGithub () {
 var githubExports = requireGithub();
 
 /**
+ * Create a File instance
+ */
+const createFile = (fileName, status, patch, conflicts = []) => ({
+    fileName,
+    status,
+    patch,
+    conflicts,
+    hasConflicts: () => conflicts.length > 0
+});
+
+/**
  * Conflict marker type definition
  */
 const CONFLICT_MARKERS = ['<<<<<<<', '>>>>>>>', '======='];
@@ -31252,18 +31263,18 @@ const createConflictMarker = (lineNumber, content, markerType) => ({
  */
 const detectConflictsInFile = (file, content) => {
     const lines = content.split('\n');
-    let updatedFile = file;
+    const conflicts = [];
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (isConflictMarker(line)) {
             const markerType = detectMarkerType(line);
             if (markerType) {
                 const conflict = createConflictMarker(i + 1, line.trim(), markerType);
-                updatedFile = updatedFile.addConflict(conflict);
+                conflicts.push(conflict);
             }
         }
     }
-    return updatedFile;
+    return createFile(file.fileName, file.status, file.patch, conflicts);
 };
 /**
  * Check if a line contains a conflict marker
@@ -31292,7 +31303,7 @@ const detectConflictsInPatch = (file) => {
         return file;
     }
     const lines = file.patch.split('\n');
-    let updatedFile = file;
+    const conflicts = [];
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         // Only check added lines (starting with '+')
@@ -31305,12 +31316,12 @@ const detectConflictsInPatch = (file) => {
                 if (markerType) {
                     // Note: line number is not meaningful in patch context
                     const conflict = createConflictMarker(0, lineContent.trim(), markerType);
-                    updatedFile = updatedFile.addConflict(conflict);
+                    conflicts.push(conflict);
                 }
             }
         }
     }
-    return updatedFile;
+    return createFile(file.fileName, file.status, file.patch, conflicts);
 };
 
 const fileStatusFromString = (value) => {
@@ -31419,21 +31430,6 @@ const createPullRequestData = (owner, repo, pullNumber, headSha) => ({
     pullNumber,
     headSha,
     getIdentifier: () => `${owner}/${repo}#${pullNumber}`
-});
-
-/**
- * Create a File instance
- */
-const createFile = (fileName, status, patch, conflicts = []) => ({
-    fileName,
-    status,
-    patch,
-    conflicts,
-    hasConflicts: () => conflicts.length > 0,
-    addConflict: (conflict) => {
-        const newConflicts = [...conflicts, conflict];
-        return createFile(fileName, status, patch, newConflicts);
-    }
 });
 
 /**

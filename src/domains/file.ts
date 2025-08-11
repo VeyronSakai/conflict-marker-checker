@@ -10,7 +10,6 @@ export type File = {
   readonly patch?: string
   readonly conflicts: ConflictMarker[]
   readonly hasConflicts: () => boolean
-  readonly addConflict: (conflict: ConflictMarker) => File
 }
 
 /**
@@ -26,9 +25,5 @@ export const createFile = (
   status,
   patch,
   conflicts,
-  hasConflicts: () => conflicts.length > 0,
-  addConflict: (conflict: ConflictMarker) => {
-    const newConflicts = [...conflicts, conflict]
-    return createFile(fileName, status, patch, newConflicts)
-  }
+  hasConflicts: () => conflicts.length > 0
 })
