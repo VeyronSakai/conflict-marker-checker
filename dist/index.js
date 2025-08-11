@@ -31234,96 +31234,6 @@ function requireGithub () {
 
 var githubExports = requireGithub();
 
-/**
- * Create a File instance
- */
-const createFile = (fileName, status, patch, conflicts = []) => ({
-    fileName,
-    status,
-    patch,
-    conflicts,
-    hasConflicts: () => conflicts.length > 0
-});
-
-/**
- * Conflict marker type definition
- */
-const CONFLICT_MARKERS = ['<<<<<<<', '>>>>>>>', '======='];
-/**
- * Create a ConflictMarker instance
- */
-const createConflictMarker = (lineNumber, content, markerType) => ({
-    lineNumber,
-    content,
-    markerType
-});
-
-/**
- * Detect conflict markers from file content and update file
- */
-const detectConflictsInFile = (file, content) => {
-    const lines = content.split('\n');
-    const conflicts = [];
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (isConflictMarker(line)) {
-            const markerType = detectMarkerType(line);
-            if (markerType) {
-                const conflict = createConflictMarker(i + 1, line.trim(), markerType);
-                conflicts.push(conflict);
-            }
-        }
-    }
-    return createFile(file.fileName, file.status, file.patch, conflicts);
-};
-/**
- * Check if a line contains a conflict marker
- */
-const isConflictMarker = (line) => {
-    const trimmedLine = line.trimStart();
-    return CONFLICT_MARKERS.some((marker) => trimmedLine.startsWith(marker));
-};
-/**
- * Detect the type of conflict marker in a line
- */
-const detectMarkerType = (line) => {
-    const trimmedLine = line.trimStart();
-    for (const marker of CONFLICT_MARKERS) {
-        if (trimmedLine.startsWith(marker)) {
-            return marker;
-        }
-    }
-    return null;
-};
-/**
- * Detect conflict markers from patch content (only added lines)
- */
-const detectConflictsInPatch = (file) => {
-    if (!file.patch) {
-        return file;
-    }
-    const lines = file.patch.split('\n');
-    const conflicts = [];
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        // Only check added lines (starting with '+')
-        // Skip lines that are just '+' or '+++' (file header)
-        if (line.startsWith('+') && !line.startsWith('+++')) {
-            // Remove the '+' prefix and check for conflict markers
-            const lineContent = line.substring(1);
-            if (isConflictMarker(lineContent)) {
-                const markerType = detectMarkerType(lineContent);
-                if (markerType) {
-                    // Note: line number is not meaningful in patch context
-                    const conflict = createConflictMarker(0, lineContent.trim(), markerType);
-                    conflicts.push(conflict);
-                }
-            }
-        }
-    }
-    return createFile(file.fileName, file.status, file.patch, conflicts);
-};
-
 const fileStatusFromString = (value) => {
     switch (value.toLowerCase()) {
         case 'added':
@@ -31352,7 +31262,7 @@ const isFileRemoved = (status) => {
  * Check pull request for conflicts function
  */
 const checkPullRequestForConflicts = async (dependencies) => {
-    const { pullRequestRepository, fileContentRepository, output, excludePatterns } = dependencies;
+    const { pullRequestRepository, output, excludePatterns } = dependencies;
     try {
         // Get pull request information
         const pullRequest = pullRequestRepository.getCurrentPullRequest();
@@ -31367,29 +31277,12 @@ const checkPullRequestForConflicts = async (dependencies) => {
                 coreExports.info(`Skipping ${file.fileName} (matches exclude pattern)`);
                 continue;
             }
-            // Check conflicts - use patch if available, otherwise fetch full content
-            let checkedFile = file;
-            if (file.patch) {
-                // Use patch for small/medium files (patch is available)
-                checkedFile = detectConflictsInPatch(file);
-            }
-            else {
-                // For large files where patch is empty, fetch full content
-                coreExports.info(`Patch not available for ${file.fileName}, fetching full content...`);
-                const content = await fileContentRepository.getFileContent(pullRequest, file);
-                if (content) {
-                    checkedFile = detectConflictsInFile(file, content);
-                }
-                else {
-                    coreExports.warning(`Could not fetch content for ${file.fileName}`);
-                    continue;
-                }
-            }
-            if (checkedFile.hasConflicts()) {
+            // Files already have conflicts detected by fetchFiles
+            if (file.hasConflicts()) {
                 const fileName = file.fileName;
                 conflictedFiles.push(fileName);
                 // Log conflict details
-                for (const conflict of checkedFile.conflicts) {
+                for (const conflict of file.conflicts) {
                     coreExports.error(`Conflict marker found in ${fileName}: ${conflict.content}`);
                 }
             }
@@ -31433,6 +31326,30 @@ const createPullRequestData = (owner, repo, pullNumber, headSha) => ({
 });
 
 /**
+ * Create a File instance
+ */
+const createFile = (fileName, status, patch, conflicts = []) => ({
+    fileName,
+    status,
+    patch,
+    conflicts,
+    hasConflicts: () => conflicts.length > 0
+});
+
+/**
+ * Conflict marker type definition
+ */
+const CONFLICT_MARKERS = ['<<<<<<<', '>>>>>>>', '======='];
+/**
+ * Create a ConflictMarker instance
+ */
+const createConflictMarker = (lineNumber, content, markerType) => ({
+    lineNumber,
+    content,
+    markerType
+});
+
+/**
  * Waits for a number of milliseconds.
  *
  * @param milliseconds The number of milliseconds to wait.
@@ -31449,7 +31366,7 @@ async function wait(milliseconds) {
 /**
  * Pull request repository implementation using GitHub API
  */
-const createPullRequestRepository = (octokit) => {
+const createPullRequestRepository = (octokit, getFileContent) => {
     return {
         getCurrentPullRequest: () => {
             const context = githubExports.context;
@@ -31482,12 +31399,30 @@ const createPullRequestRepository = (octokit) => {
                     if (remaining < 100) {
                         coreExports.warning(`Low API rate limit: ${remaining} requests remaining. Reset at ${new Date(reset * 1000).toISOString()}`);
                     }
-                    // Convert to domain entities
+                    // Convert to domain entities and detect conflicts
                     for (const fileData of response.data) {
                         const fileName = fileData.filename;
                         const status = fileStatusFromString(fileData.status);
                         const patch = fileData.patch;
-                        const file = createFile(fileName, status, patch);
+                        let conflicts = [];
+                        // Check conflicts - use patch if available, otherwise fetch full content
+                        if (patch) {
+                            // Use patch for small/medium files (patch is available)
+                            conflicts = detectConflictsInPatch(patch);
+                        }
+                        else if (getFileContent) {
+                            // For large files where patch is empty, fetch full content
+                            coreExports.info(`Patch not available for ${fileName}, fetching full content...`);
+                            const tempFile = createFile(fileName, status, patch);
+                            const content = await getFileContent(pullRequest, tempFile);
+                            if (content) {
+                                conflicts = detectConflictsInContent(content);
+                            }
+                            else {
+                                coreExports.warning(`Could not fetch content for ${fileName}`);
+                            }
+                        }
+                        const file = createFile(fileName, status, patch, conflicts);
                         allFiles.push(file);
                     }
                     if (response.data.length < perPage) {
@@ -31514,6 +31449,68 @@ const createPullRequestRepository = (octokit) => {
             return allFiles;
         }
     };
+};
+/**
+ * Check if a line contains a conflict marker
+ */
+const isConflictMarker = (line) => {
+    const trimmedLine = line.trimStart();
+    return CONFLICT_MARKERS.some((marker) => trimmedLine.startsWith(marker));
+};
+/**
+ * Detect the type of conflict marker in a line
+ */
+const detectMarkerType = (line) => {
+    const trimmedLine = line.trimStart();
+    for (const marker of CONFLICT_MARKERS) {
+        if (trimmedLine.startsWith(marker)) {
+            return marker;
+        }
+    }
+    return null;
+};
+/**
+ * Detect conflict markers from patch content (only added lines)
+ */
+const detectConflictsInPatch = (patch) => {
+    const lines = patch.split('\n');
+    const conflicts = [];
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        // Only check added lines (starting with '+')
+        // Skip lines that are just '+' or '+++' (file header)
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+            // Remove the '+' prefix and check for conflict markers
+            const lineContent = line.substring(1);
+            if (isConflictMarker(lineContent)) {
+                const markerType = detectMarkerType(lineContent);
+                if (markerType) {
+                    // Note: line number is not meaningful in patch context
+                    const conflict = createConflictMarker(0, lineContent.trim(), markerType);
+                    conflicts.push(conflict);
+                }
+            }
+        }
+    }
+    return conflicts;
+};
+/**
+ * Detect conflict markers from file content
+ */
+const detectConflictsInContent = (content) => {
+    const lines = content.split('\n');
+    const conflicts = [];
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (isConflictMarker(line)) {
+            const markerType = detectMarkerType(line);
+            if (markerType) {
+                const conflict = createConflictMarker(i + 1, line.trim(), markerType);
+                conflicts.push(conflict);
+            }
+        }
+    }
+    return conflicts;
 };
 const handleRateLimit = async (error) => {
     if (error &&
@@ -31591,8 +31588,8 @@ async function run() {
     const octokit = githubExports.getOctokit(token);
     // Create adapters and repositories
     const outputAdapter = createActionOutputAdapter();
-    const pullRequestRepository = createPullRequestRepository(octokit);
     const fileContentRepository = createFileContentRepository(octokit);
+    const pullRequestRepository = createPullRequestRepository(octokit, fileContentRepository.getFileContent);
     // Parse exclude patterns
     const excludePatternsArray = excludePatterns
         ? excludePatterns.split(',').map((p) => p.trim())
@@ -31600,7 +31597,6 @@ async function run() {
     // Execute use case
     await checkPullRequestForConflicts({
         pullRequestRepository,
-        fileContentRepository,
         output: outputAdapter,
         excludePatterns: excludePatternsArray
     });

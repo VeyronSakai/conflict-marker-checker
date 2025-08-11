@@ -7,13 +7,23 @@ import {
 } from '../domains/pullRequestData.js'
 import { type File, createFile } from '../domains/file.js'
 import { fileStatusFromString } from '../domains/fileStatus.js'
+import {
+  CONFLICT_MARKERS,
+  type MarkerType,
+  createConflictMarker,
+  type ConflictMarker
+} from '../domains/conflictMarker.js'
 import { wait } from '../wait.js'
 
 /**
  * Pull request repository implementation using GitHub API
  */
 export const createPullRequestRepository = (
-  octokit: ReturnType<typeof github.getOctokit>
+  octokit: ReturnType<typeof github.getOctokit>,
+  getFileContent?: (
+    pullRequest: PullRequestData,
+    file: File
+  ) => Promise<string | null>
 ): PullRequestRepositoryPort => {
   return {
     getCurrentPullRequest: (): PullRequestData => {
@@ -59,12 +69,34 @@ export const createPullRequestRepository = (
             )
           }
 
-          // Convert to domain entities
+          // Convert to domain entities and detect conflicts
           for (const fileData of response.data) {
             const fileName = fileData.filename
             const status = fileStatusFromString(fileData.status)
             const patch = fileData.patch
-            const file = createFile(fileName, status, patch)
+
+            let conflicts: ConflictMarker[] = []
+
+            // Check conflicts - use patch if available, otherwise fetch full content
+            if (patch) {
+              // Use patch for small/medium files (patch is available)
+              conflicts = detectConflictsInPatch(patch)
+            } else if (getFileContent) {
+              // For large files where patch is empty, fetch full content
+              core.info(
+                `Patch not available for ${fileName}, fetching full content...`
+              )
+              const tempFile = createFile(fileName, status, patch)
+              const content = await getFileContent(pullRequest, tempFile)
+
+              if (content) {
+                conflicts = detectConflictsInContent(content)
+              } else {
+                core.warning(`Could not fetch content for ${fileName}`)
+              }
+            }
+
+            const file = createFile(fileName, status, patch, conflicts)
             allFiles.push(file)
           }
 
@@ -98,6 +130,80 @@ export const createPullRequestRepository = (
       return allFiles
     }
   }
+}
+
+/**
+ * Check if a line contains a conflict marker
+ */
+const isConflictMarker = (line: string): boolean => {
+  const trimmedLine = line.trimStart()
+  return CONFLICT_MARKERS.some((marker) => trimmedLine.startsWith(marker))
+}
+
+/**
+ * Detect the type of conflict marker in a line
+ */
+const detectMarkerType = (line: string): MarkerType | null => {
+  const trimmedLine = line.trimStart()
+  for (const marker of CONFLICT_MARKERS) {
+    if (trimmedLine.startsWith(marker)) {
+      return marker
+    }
+  }
+  return null
+}
+
+/**
+ * Detect conflict markers from patch content (only added lines)
+ */
+const detectConflictsInPatch = (patch: string): ConflictMarker[] => {
+  const lines = patch.split('\n')
+  const conflicts: ConflictMarker[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    // Only check added lines (starting with '+')
+    // Skip lines that are just '+' or '+++' (file header)
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      // Remove the '+' prefix and check for conflict markers
+      const lineContent = line.substring(1)
+      if (isConflictMarker(lineContent)) {
+        const markerType = detectMarkerType(lineContent)
+        if (markerType) {
+          // Note: line number is not meaningful in patch context
+          const conflict = createConflictMarker(
+            0,
+            lineContent.trim(),
+            markerType
+          )
+          conflicts.push(conflict)
+        }
+      }
+    }
+  }
+
+  return conflicts
+}
+
+/**
+ * Detect conflict markers from file content
+ */
+const detectConflictsInContent = (content: string): ConflictMarker[] => {
+  const lines = content.split('\n')
+  const conflicts: ConflictMarker[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (isConflictMarker(line)) {
+      const markerType = detectMarkerType(line)
+      if (markerType) {
+        const conflict = createConflictMarker(i + 1, line.trim(), markerType)
+        conflicts.push(conflict)
+      }
+    }
+  }
+
+  return conflicts
 }
 
 const handleRateLimit = async (error: unknown): Promise<number> => {

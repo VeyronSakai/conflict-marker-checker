@@ -1,12 +1,7 @@
 import * as core from '@actions/core'
 import type { PullRequestRepositoryPort } from '../domains/pullRequestRepositoryPort.js'
-import type { FileContentRepository } from '../infrastructures/fileContentRepository.js'
 import type { OutputPort } from '../domains/outputPort.js'
 import type { File } from '../domains/file.js'
-import {
-  detectConflictsInPatch,
-  detectConflictsInFile
-} from './fileConflictChecker.js'
 import { isFileRemoved } from '../domains/fileStatus.js'
 
 /**
@@ -14,16 +9,10 @@ import { isFileRemoved } from '../domains/fileStatus.js'
  */
 export const checkPullRequestForConflicts = async (dependencies: {
   pullRequestRepository: PullRequestRepositoryPort
-  fileContentRepository: FileContentRepository
   output: OutputPort
   excludePatterns: string[]
 }): Promise<void> => {
-  const {
-    pullRequestRepository,
-    fileContentRepository,
-    output,
-    excludePatterns
-  } = dependencies
+  const { pullRequestRepository, output, excludePatterns } = dependencies
 
   try {
     // Get pull request information
@@ -45,36 +34,13 @@ export const checkPullRequestForConflicts = async (dependencies: {
         continue
       }
 
-      // Check conflicts - use patch if available, otherwise fetch full content
-      let checkedFile: File = file
-
-      if (file.patch) {
-        // Use patch for small/medium files (patch is available)
-        checkedFile = detectConflictsInPatch(file)
-      } else {
-        // For large files where patch is empty, fetch full content
-        core.info(
-          `Patch not available for ${file.fileName}, fetching full content...`
-        )
-        const content = await fileContentRepository.getFileContent(
-          pullRequest,
-          file
-        )
-
-        if (content) {
-          checkedFile = detectConflictsInFile(file, content)
-        } else {
-          core.warning(`Could not fetch content for ${file.fileName}`)
-          continue
-        }
-      }
-
-      if (checkedFile.hasConflicts()) {
+      // Files already have conflicts detected by fetchFiles
+      if (file.hasConflicts()) {
         const fileName = file.fileName
         conflictedFiles.push(fileName)
 
         // Log conflict details
-        for (const conflict of checkedFile.conflicts) {
+        for (const conflict of file.conflicts) {
           core.error(
             `Conflict marker found in ${fileName}: ${conflict.content}`
           )

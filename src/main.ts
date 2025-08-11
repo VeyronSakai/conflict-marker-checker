@@ -20,8 +20,11 @@ export async function run(): Promise<void> {
 
   // Create adapters and repositories
   const outputAdapter = createActionOutputAdapter()
-  const pullRequestRepository = createPullRequestRepository(octokit)
   const fileContentRepository = createFileContentRepository(octokit)
+  const pullRequestRepository = createPullRequestRepository(
+    octokit,
+    fileContentRepository.getFileContent
+  )
 
   // Parse exclude patterns
   const excludePatternsArray = excludePatterns
@@ -31,7 +34,6 @@ export async function run(): Promise<void> {
   // Execute use case
   await checkPullRequestForConflicts({
     pullRequestRepository,
-    fileContentRepository,
     output: outputAdapter,
     excludePatterns: excludePatternsArray
   })
