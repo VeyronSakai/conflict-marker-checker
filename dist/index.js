@@ -31424,7 +31424,7 @@ const createPullRequestRepository = (octokit, getFileContent) => {
                     if (retries >= maxRetries) {
                         throw new Error(`GitHub API request failed after ${maxRetries} retries: ${error}`);
                     }
-                    const waitTime = await handleRateLimit(error);
+                    const waitTime = await getWaitTime(error);
                     await wait(waitTime);
                     retries++;
                 }
@@ -31519,9 +31519,9 @@ const getConflictMarkers = async (fileName, status, patch, pullRequest, getFileC
     return [];
 };
 /**
- * Handle rate limit errors from GitHub API
+ * Get wait time for rate limit errors from GitHub API
  */
-const handleRateLimit = async (error) => {
+const getWaitTime = async (error) => {
     if (error &&
         typeof error === 'object' &&
         'status' in error &&
