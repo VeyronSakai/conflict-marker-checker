@@ -7,6 +7,7 @@ import type { ConflictMarker } from './conflictMarker.js'
 export type File = {
   readonly fileName: string
   readonly status: FileStatus
+  readonly patch?: string
   readonly conflicts: ConflictMarker[]
   readonly hasConflicts: () => boolean
   readonly addConflict: (conflict: ConflictMarker) => File
@@ -18,14 +19,16 @@ export type File = {
 export const createFile = (
   fileName: string,
   status: FileStatus,
+  patch?: string,
   conflicts: ConflictMarker[] = []
 ): File => ({
   fileName,
   status,
+  patch,
   conflicts,
   hasConflicts: () => conflicts.length > 0,
   addConflict: (conflict: ConflictMarker) => {
     const newConflicts = [...conflicts, conflict]
-    return createFile(fileName, status, newConflicts)
+    return createFile(fileName, status, patch, newConflicts)
   }
 })

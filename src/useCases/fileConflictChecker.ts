@@ -46,3 +46,39 @@ const detectMarkerType = (line: string): MarkerType | null => {
   }
   return null
 }
+
+/**
+ * Detect conflict markers from patch content (only added lines)
+ */
+export const detectConflictsInPatch = (file: File): File => {
+  if (!file.patch) {
+    return file
+  }
+
+  const lines = file.patch.split('\n')
+  let updatedFile = file
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    // Only check added lines (starting with '+')
+    // Skip lines that are just '+' or '+++' (file header)
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      // Remove the '+' prefix and check for conflict markers
+      const lineContent = line.substring(1)
+      if (isConflictMarker(lineContent)) {
+        const markerType = detectMarkerType(lineContent)
+        if (markerType) {
+          // Note: line number is not meaningful in patch context
+          const conflict = createConflictMarker(
+            0,
+            lineContent.trim(),
+            markerType
+          )
+          updatedFile = updatedFile.addConflict(conflict)
+        }
+      }
+    }
+  }
+
+  return updatedFile
+}

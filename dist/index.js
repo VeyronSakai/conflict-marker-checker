@@ -31284,6 +31284,34 @@ const detectMarkerType = (line) => {
     }
     return null;
 };
+/**
+ * Detect conflict markers from patch content (only added lines)
+ */
+const detectConflictsInPatch = (file) => {
+    if (!file.patch) {
+        return file;
+    }
+    const lines = file.patch.split('\n');
+    let updatedFile = file;
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        // Only check added lines (starting with '+')
+        // Skip lines that are just '+' or '+++' (file header)
+        if (line.startsWith('+') && !line.startsWith('+++')) {
+            // Remove the '+' prefix and check for conflict markers
+            const lineContent = line.substring(1);
+            if (isConflictMarker(lineContent)) {
+                const markerType = detectMarkerType(lineContent);
+                if (markerType) {
+                    // Note: line number is not meaningful in patch context
+                    const conflict = createConflictMarker(0, lineContent.trim(), markerType);
+                    updatedFile = updatedFile.addConflict(conflict);
+                }
+            }
+        }
+    }
+    return updatedFile;
+};
 
 const fileStatusFromString = (value) => {
     switch (value.toLowerCase()) {
@@ -31328,16 +31356,30 @@ const checkPullRequestForConflicts = async (dependencies) => {
                 coreExports.info(`Skipping ${file.fileName} (matches exclude pattern)`);
                 continue;
             }
-            const content = await fileContentRepository.getFileContent(pullRequest, file);
-            if (content !== null) {
-                const checkedFile = detectConflictsInFile(file, content);
-                if (checkedFile.hasConflicts()) {
-                    const fileName = file.fileName;
-                    conflictedFiles.push(fileName);
-                    // Log conflict details
-                    for (const conflict of checkedFile.conflicts) {
-                        coreExports.error(`Conflict marker found in ${fileName} at line ${conflict.lineNumber}: ${conflict.content}`);
-                    }
+            // Check conflicts - use patch if available, otherwise fetch full content
+            let checkedFile = file;
+            if (file.patch) {
+                // Use patch for small/medium files (patch is available)
+                checkedFile = detectConflictsInPatch(file);
+            }
+            else {
+                // For large files where patch is empty, fetch full content
+                coreExports.info(`Patch not available for ${file.fileName}, fetching full content...`);
+                const content = await fileContentRepository.getFileContent(pullRequest, file);
+                if (content) {
+                    checkedFile = detectConflictsInFile(file, content);
+                }
+                else {
+                    coreExports.warning(`Could not fetch content for ${file.fileName}`);
+                    continue;
+                }
+            }
+            if (checkedFile.hasConflicts()) {
+                const fileName = file.fileName;
+                conflictedFiles.push(fileName);
+                // Log conflict details
+                for (const conflict of checkedFile.conflicts) {
+                    coreExports.error(`Conflict marker found in ${fileName}: ${conflict.content}`);
                 }
             }
         }
@@ -31382,14 +31424,15 @@ const createPullRequestData = (owner, repo, pullNumber, headSha) => ({
 /**
  * Create a File instance
  */
-const createFile = (fileName, status, conflicts = []) => ({
+const createFile = (fileName, status, patch, conflicts = []) => ({
     fileName,
     status,
+    patch,
     conflicts,
     hasConflicts: () => conflicts.length > 0,
     addConflict: (conflict) => {
         const newConflicts = [...conflicts, conflict];
-        return createFile(fileName, status, newConflicts);
+        return createFile(fileName, status, patch, newConflicts);
     }
 });
 
@@ -31447,7 +31490,8 @@ const createPullRequestRepository = (octokit) => {
                     for (const fileData of response.data) {
                         const fileName = fileData.filename;
                         const status = fileStatusFromString(fileData.status);
-                        const file = createFile(fileName, status);
+                        const patch = fileData.patch;
+                        const file = createFile(fileName, status, patch);
                         allFiles.push(file);
                     }
                     if (response.data.length < perPage) {

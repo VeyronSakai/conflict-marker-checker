@@ -63,7 +63,8 @@ export const createPullRequestRepository = (
           for (const fileData of response.data) {
             const fileName = fileData.filename
             const status = fileStatusFromString(fileData.status)
-            const file = createFile(fileName, status)
+            const patch = fileData.patch
+            const file = createFile(fileName, status, patch)
             allFiles.push(file)
           }
 
