@@ -31509,8 +31509,7 @@ const getConflictMarkers = async (fileName, status, patch, pullRequest, getFileC
     else if (getFileContent) {
         // For large files where patch is empty, fetch full content
         coreExports.info(`Patch not available for ${fileName}, fetching full content...`);
-        const tempFile = createFile(fileName, status, patch);
-        const content = await getFileContent(pullRequest, tempFile);
+        const content = await getFileContent(pullRequest, fileName);
         if (content) {
             return getConflictMarkersInContent(content);
         }
@@ -31549,12 +31548,12 @@ const getWaitTime = (error) => {
 };
 
 const createFileContentRepository = (octokit) => ({
-    getFileContent: async (pullRequest, file) => {
+    getFileContent: async (pullRequest, fileName) => {
         try {
             const { data: fileContent } = await octokit.rest.repos.getContent({
                 owner: pullRequest.owner,
                 repo: pullRequest.repo,
-                path: file.fileName,
+                path: fileName,
                 ref: pullRequest.headSha
             });
             if ('content' in fileContent && typeof fileContent.content === 'string') {
@@ -31563,7 +31562,7 @@ const createFileContentRepository = (octokit) => ({
             return null;
         }
         catch (error) {
-            coreExports.warning(`Could not check file ${file.fileName}: ${error}`);
+            coreExports.warning(`Could not check file ${fileName}: ${error}`);
             return null;
         }
     }
