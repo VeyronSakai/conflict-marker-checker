@@ -111,7 +111,7 @@ export const createPullRequestRepository = (
             )
           }
 
-          const waitTime = await getWaitTime(error)
+          const waitTime = getWaitTime(error)
           await wait(waitTime)
           retries++
         }
