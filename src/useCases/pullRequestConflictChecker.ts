@@ -1,9 +1,7 @@
 import * as core from '@actions/core'
 import type { PullRequestRepositoryPort } from '../domains/pullRequestRepositoryPort.js'
-import type { FileContentRepository } from '../infrastructures/fileContentRepository.js'
 import type { OutputPort } from '../domains/outputPort.js'
 import type { File } from '../domains/file.js'
-import { detectConflictsInFile } from './fileConflictChecker.js'
 import { isFileRemoved } from '../domains/fileStatus.js'
 
 /**
@@ -11,16 +9,10 @@ import { isFileRemoved } from '../domains/fileStatus.js'
  */
 export const checkPullRequestForConflicts = async (dependencies: {
   pullRequestRepository: PullRequestRepositoryPort
-  fileContentRepository: FileContentRepository
   output: OutputPort
   excludePatterns: string[]
 }): Promise<void> => {
-  const {
-    pullRequestRepository,
-    fileContentRepository,
-    output,
-    excludePatterns
-  } = dependencies
+  const { pullRequestRepository, output, excludePatterns } = dependencies
 
   try {
     // Get pull request information
@@ -30,7 +22,7 @@ export const checkPullRequestForConflicts = async (dependencies: {
     )
 
     // Fetch file list
-    const files = await pullRequestRepository.fetchFiles(pullRequest)
+    const files = await pullRequestRepository.getFiles(pullRequest)
     core.info(`Total files to check: ${files.length}`)
 
     // Check each file for conflicts
@@ -42,24 +34,16 @@ export const checkPullRequestForConflicts = async (dependencies: {
         continue
       }
 
-      const content = await fileContentRepository.getFileContent(
-        pullRequest,
-        file
-      )
+      // Files already have conflicts detected by fetchFiles
+      if (file.hasConflictMarkers()) {
+        const fileName = file.fileName
+        conflictedFiles.push(fileName)
 
-      if (content !== null) {
-        const checkedFile = detectConflictsInFile(file, content)
-
-        if (checkedFile.hasConflicts()) {
-          const fileName = file.fileName
-          conflictedFiles.push(fileName)
-
-          // Log conflict details
-          for (const conflict of checkedFile.conflicts) {
-            core.error(
-              `Conflict marker found in ${fileName} at line ${conflict.lineNumber}: ${conflict.content}`
-            )
-          }
+        // Log conflict details
+        for (const conflict of file.conflictMarkers) {
+          core.error(
+            `Conflict marker found in ${fileName}: ${conflict.content}`
+          )
         }
       }
     }

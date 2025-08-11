@@ -77,21 +77,19 @@ describe('main.ts', () => {
       }
     }
 
-    // Mock PR files
+    // Mock PR files with patch containing conflict markers
     mockOctokit.rest.pulls.listFiles.mockResolvedValue({
-      data: [{ filename: 'test.js', status: 'modified' }],
+      data: [
+        {
+          filename: 'test.js',
+          status: 'modified',
+          patch:
+            '@@ -1,2 +1,7 @@\n line1\n+<<<<<<< HEAD\n+line2\n+=======\n+line3\n+>>>>>>> branch\n line4'
+        }
+      ],
       headers: {
         'x-ratelimit-remaining': '900',
         'x-ratelimit-reset': '9999999999'
-      }
-    })
-
-    // Mock file content with conflict markers
-    mockOctokit.rest.repos.getContent.mockResolvedValue({
-      data: {
-        content: Buffer.from(
-          'line1\n<<<<<<< HEAD\nline2\n=======\nline3\n>>>>>>> branch\nline4'
-        ).toString('base64')
       }
     })
 
@@ -119,19 +117,18 @@ describe('main.ts', () => {
       }
     }
 
-    // Mock PR files
+    // Mock PR files with patch without conflict markers
     mockOctokit.rest.pulls.listFiles.mockResolvedValue({
-      data: [{ filename: 'test.js', status: 'modified' }],
+      data: [
+        {
+          filename: 'test.js',
+          status: 'modified',
+          patch: '@@ -1,2 +1,4 @@\n line1\n+line2\n+line3\n line4'
+        }
+      ],
       headers: {
         'x-ratelimit-remaining': '900',
         'x-ratelimit-reset': '9999999999'
-      }
-    })
-
-    // Mock file content without conflict markers
-    mockOctokit.rest.repos.getContent.mockResolvedValue({
-      data: {
-        content: Buffer.from('line1\nline2\nline3\nline4').toString('base64')
       }
     })
 
@@ -156,7 +153,11 @@ describe('main.ts', () => {
     mockOctokit.rest.pulls.listFiles.mockResolvedValue({
       data: [
         { filename: 'removed.js', status: 'removed' },
-        { filename: 'test.js', status: 'modified' }
+        {
+          filename: 'test.js',
+          status: 'modified',
+          patch: '@@ -1,2 +1,4 @@\n line1\n+line2\n+line3\n line4'
+        }
       ],
       headers: {
         'x-ratelimit-remaining': '900',
@@ -164,20 +165,10 @@ describe('main.ts', () => {
       }
     })
 
-    // Mock file content without conflict markers
-    mockOctokit.rest.repos.getContent.mockResolvedValue({
-      data: {
-        content: Buffer.from('line1\nline2\nline3\nline4').toString('base64')
-      }
-    })
-
     await run()
 
-    // Should only check test.js, not removed.js
-    expect(mockOctokit.rest.repos.getContent).toHaveBeenCalledTimes(1)
-    expect(mockOctokit.rest.repos.getContent).toHaveBeenCalledWith(
-      expect.objectContaining({ path: 'test.js' })
-    )
+    // Should skip removed.js and only check test.js
+    expect(core.info).toHaveBeenCalledWith('No conflict markers found!')
   })
 
   it('Handles pagination for large PRs', async () => {
@@ -193,7 +184,8 @@ describe('main.ts', () => {
     const createFiles = (start: number, count: number) =>
       Array.from({ length: count }, (_, i) => ({
         filename: `file${start + i}.js`,
-        status: 'modified'
+        status: 'modified',
+        patch: '@@ -1,2 +1,3 @@\n line1\n+line2\n line3'
       }))
 
     mockOctokit.rest.pulls.listFiles
@@ -211,13 +203,6 @@ describe('main.ts', () => {
           'x-ratelimit-reset': '9999999999'
         }
       }) // Second page
-
-    // Mock file content without conflict markers
-    mockOctokit.rest.repos.getContent.mockResolvedValue({
-      data: {
-        content: Buffer.from('line1\nline2\nline3\nline4').toString('base64')
-      }
-    })
 
     await run()
 
@@ -237,9 +222,6 @@ describe('main.ts', () => {
       per_page: 100,
       page: 2
     })
-
-    // Verify all 150 files were checked
-    expect(mockOctokit.rest.repos.getContent).toHaveBeenCalledTimes(150)
     expect(core.info).toHaveBeenCalledWith('Total files to check: 150')
     expect(core.info).toHaveBeenCalledWith('No conflict markers found!')
   })
@@ -268,19 +250,18 @@ describe('main.ts', () => {
     mockOctokit.rest.pulls.listFiles
       .mockRejectedValueOnce(rateLimitError)
       .mockResolvedValueOnce({
-        data: [{ filename: 'test.js', status: 'modified' }],
+        data: [
+          {
+            filename: 'test.js',
+            status: 'modified',
+            patch: '@@ -1,2 +1,3 @@\n line1\n+line2\n line3'
+          }
+        ],
         headers: {
           'x-ratelimit-remaining': '500',
           'x-ratelimit-reset': '9999999999'
         }
       })
-
-    // Mock file content without conflict markers
-    mockOctokit.rest.repos.getContent.mockResolvedValue({
-      data: {
-        content: Buffer.from('line1\nline2\nline3\nline4').toString('base64')
-      }
-    })
 
     await run()
 
@@ -303,17 +284,16 @@ describe('main.ts', () => {
 
     // Mock PR files with low rate limit
     mockOctokit.rest.pulls.listFiles.mockResolvedValue({
-      data: [{ filename: 'test.js', status: 'modified' }],
+      data: [
+        {
+          filename: 'test.js',
+          status: 'modified',
+          patch: '@@ -1,2 +1,3 @@\n line1\n+line2\n line3'
+        }
+      ],
       headers: {
         'x-ratelimit-remaining': '50',
         'x-ratelimit-reset': '9999999999'
-      }
-    })
-
-    // Mock file content without conflict markers
-    mockOctokit.rest.repos.getContent.mockResolvedValue({
-      data: {
-        content: Buffer.from('line1\nline2\nline3\nline4').toString('base64')
       }
     })
 
@@ -335,29 +315,29 @@ describe('main.ts', () => {
       }
     }
 
-    // Mock PR files
+    // Mock PR files with patch containing conflict markers in LFS pointer
     mockOctokit.rest.pulls.listFiles.mockResolvedValue({
-      data: [{ filename: 'large-file.bin', status: 'modified' }],
+      data: [
+        {
+          filename: 'large-file.bin',
+          status: 'modified',
+          patch: `@@ -1,4 +1,9 @@
++<<<<<<< HEAD
+ version https://git-lfs.github.com/spec/v1
+-oid sha256:oldsha
+-size 999
++oid sha256:4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393
++size 12345
++=======
++version https://git-lfs.github.com/spec/v1
++oid sha256:6cb562612d7a9f2e9d2c5b3f1b8f9e0ff69d22eadbb8f32b1258daaa5e2ca24
++size 67890
++>>>>>>> feature-branch`
+        }
+      ],
       headers: {
         'x-ratelimit-remaining': '900',
         'x-ratelimit-reset': '9999999999'
-      }
-    })
-
-    // Mock conflicted Git LFS pointer file content
-    const conflictedLFSPointer = `<<<<<<< HEAD
-version https://git-lfs.github.com/spec/v1
-oid sha256:4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393
-size 12345
-=======
-version https://git-lfs.github.com/spec/v1
-oid sha256:6cb562612d7a9f2e9d2c5b3f1b8f9e0ff69d22eadbb8f32b1258daaa5e2ca24
-size 67890
->>>>>>> feature-branch`
-
-    mockOctokit.rest.repos.getContent.mockResolvedValue({
-      data: {
-        content: Buffer.from(conflictedLFSPointer).toString('base64')
       }
     })
 
@@ -385,32 +365,24 @@ size 67890
       }
     }
 
-    // Mock PR files
+    // Mock PR files with patch containing only normal code changes (no conflicts)
     mockOctokit.rest.pulls.listFiles.mockResolvedValue({
-      data: [{ filename: 'test.js', status: 'modified' }],
+      data: [
+        {
+          filename: 'test.js',
+          status: 'modified',
+          patch: `@@ -1,3 +1,5 @@
+ function test() {
++  // This is a regular comment
++  console.log('hello');
+   const x = 1;
+   return x;
+ }`
+        }
+      ],
       headers: {
         'x-ratelimit-remaining': '900',
         'x-ratelimit-reset': '9999999999'
-      }
-    })
-
-    // Mock file content with comment containing separator-like pattern
-    const codeWithComments = `function test() {
-  // =======================
-  // This is a comment separator
-  // =======================
-  console.log('hello');
-  
-  /* <<<<<<< This looks like a conflict marker but it's in a comment */
-  const x = 1;
-  
-  // Another comment with >>>>>>> branch-name
-  return x;
-}`
-
-    mockOctokit.rest.repos.getContent.mockResolvedValue({
-      data: {
-        content: Buffer.from(codeWithComments).toString('base64')
       }
     })
 
@@ -433,30 +405,28 @@ size 67890
       }
     }
 
-    // Mock PR files
+    // Mock PR files with patch containing real conflict markers
     mockOctokit.rest.pulls.listFiles.mockResolvedValue({
-      data: [{ filename: 'test.js', status: 'modified' }],
+      data: [
+        {
+          filename: 'test.js',
+          status: 'modified',
+          patch: `@@ -1,5 +1,9 @@
+ function test() {
+   // This comment has ======= but should be ignored
+   const x = 1;
++<<<<<<< HEAD
++  const y = 2;
++=======
++  const y = 3;
++>>>>>>> feature-branch
+   return x + y;
+ }`
+        }
+      ],
       headers: {
         'x-ratelimit-remaining': '900',
         'x-ratelimit-reset': '9999999999'
-      }
-    })
-
-    // Mock file content with real conflict markers and comments
-    const codeWithRealConflict = `function test() {
-  // This comment has ======= but should be ignored
-  const x = 1;
-<<<<<<< HEAD
-  const y = 2;
-=======
-  const y = 3;
->>>>>>> feature-branch
-  return x + y;
-}`
-
-    mockOctokit.rest.repos.getContent.mockResolvedValue({
-      data: {
-        content: Buffer.from(codeWithRealConflict).toString('base64')
       }
     })
 
@@ -476,6 +446,161 @@ size 67890
     )
   })
 
+  it('Falls back to getContent for large files without patch', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock PR files where patch is undefined (large file)
+    mockOctokit.rest.pulls.listFiles.mockResolvedValue({
+      data: [
+        {
+          filename: 'large-file.js',
+          status: 'modified'
+          // Note: no patch field (happens for large files)
+        }
+      ],
+      headers: {
+        'x-ratelimit-remaining': '900',
+        'x-ratelimit-reset': '9999999999'
+      }
+    })
+
+    // Mock getContent to return file with conflict markers
+    mockOctokit.rest.repos.getContent.mockResolvedValue({
+      data: {
+        content: Buffer.from(
+          `function test() {
+<<<<<<< HEAD
+  const x = 1;
+=======
+  const x = 2;
+>>>>>>> branch
+  return x;
+}`
+        ).toString('base64')
+      }
+    })
+
+    await run()
+
+    // Should call getContent for the large file
+    expect(mockOctokit.rest.repos.getContent).toHaveBeenCalledWith({
+      owner: 'test-owner',
+      repo: 'test-repo',
+      path: 'large-file.js',
+      ref: 'abc123'
+    })
+
+    expect(core.info).toHaveBeenCalledWith(
+      'Patch not available for large-file.js, fetching full content...'
+    )
+    expect(core.error).toHaveBeenCalledWith(
+      expect.stringContaining('Conflict marker found in large-file.js')
+    )
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Found conflict markers in 1 file(s)')
+    )
+  })
+
+  it('Ignores conflict markers in deleted lines', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock PR files with patch containing conflict markers only in deleted lines
+    mockOctokit.rest.pulls.listFiles.mockResolvedValue({
+      data: [
+        {
+          filename: 'test.js',
+          status: 'modified',
+          patch: `@@ -1,7 +1,3 @@
+ function test() {
+-<<<<<<< HEAD
+-  const x = 1;
+-=======
+-  const x = 2;
+->>>>>>> branch
++  const x = 3;
+   return x;
+ }`
+        }
+      ],
+      headers: {
+        'x-ratelimit-remaining': '900',
+        'x-ratelimit-reset': '9999999999'
+      }
+    })
+
+    await run()
+
+    // Should NOT detect conflict markers in deleted lines
+    expect(core.error).not.toHaveBeenCalled()
+    expect(core.info).toHaveBeenCalledWith('No conflict markers found!')
+    expect(core.setOutput).toHaveBeenCalledWith('conflicts', 'false')
+    expect(core.setOutput).toHaveBeenCalledWith('conflicted-files', '')
+    expect(core.setFailed).not.toHaveBeenCalled()
+  })
+
+  it('Detects conflicts in added lines but ignores in deleted lines', async () => {
+    // Set context with pull_request
+    github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: { sha: 'abc123' }
+      }
+    }
+
+    // Mock PR files with conflict markers in both added and deleted lines
+    mockOctokit.rest.pulls.listFiles.mockResolvedValue({
+      data: [
+        {
+          filename: 'test.js',
+          status: 'modified',
+          patch: `@@ -1,7 +1,7 @@
+ function test() {
+-<<<<<<< HEAD
+-  const x = 1;
+-=======
+-  const x = 2;
+->>>>>>> old-branch
++  const x = 3;
++<<<<<<< HEAD
++  const y = 4;
++=======
++  const y = 5;
++>>>>>>> new-branch
+   return x + y;
+ }`
+        }
+      ],
+      headers: {
+        'x-ratelimit-remaining': '900',
+        'x-ratelimit-reset': '9999999999'
+      }
+    })
+
+    await run()
+
+    // Should detect conflict markers only in added lines
+    expect(core.error).toHaveBeenCalledWith(
+      expect.stringContaining('Conflict marker found in test.js')
+    )
+    expect(core.setFailed).toHaveBeenCalledWith(
+      expect.stringContaining('Found conflict markers in 1 file(s)')
+    )
+    // Should detect exactly 3 conflict markers (from added lines only)
+    expect(core.error).toHaveBeenCalledTimes(3)
+  })
+
   it('Handles conflict markers with leading whitespace', async () => {
     // Set context with pull_request
     github.context.payload = {
@@ -485,28 +610,26 @@ size 67890
       }
     }
 
-    // Mock PR files
+    // Mock PR files with patch containing indented conflict markers (common in YAML)
     mockOctokit.rest.pulls.listFiles.mockResolvedValue({
-      data: [{ filename: 'test.yaml', status: 'modified' }],
+      data: [
+        {
+          filename: 'test.yaml',
+          status: 'modified',
+          patch: `@@ -1,3 +1,7 @@
+ config:
+   setting1: value1
++  <<<<<<< HEAD
++  setting2: value2-from-head
++  =======
++  setting2: value2-from-branch
++  >>>>>>> feature-branch
+   setting3: value3`
+        }
+      ],
       headers: {
         'x-ratelimit-remaining': '900',
         'x-ratelimit-reset': '9999999999'
-      }
-    })
-
-    // Mock file content with indented conflict markers (common in YAML/JSON)
-    const yamlWithConflict = `config:
-  setting1: value1
-  <<<<<<< HEAD
-  setting2: value2-from-head
-  =======
-  setting2: value2-from-branch
-  >>>>>>> feature-branch
-  setting3: value3`
-
-    mockOctokit.rest.repos.getContent.mockResolvedValue({
-      data: {
-        content: Buffer.from(yamlWithConflict).toString('base64')
       }
     })
 
