@@ -31363,6 +31363,8 @@ async function wait(milliseconds) {
     });
 }
 
+// Constant for unknown line numbers in patch context
+const UNKNOWN_LINE_NUMBER = 0;
 /**
  * Pull request repository implementation using GitHub API
  */
@@ -31469,9 +31471,9 @@ const getConflictMarkersInPatch = (patch) => {
                 const markerType = getMarkerType(lineContent);
                 if (markerType) {
                     // In patch context, the actual line number in the original file is not available.
-                    // We use '0' as a sentinel value to indicate that the line number is unknown or not applicable.
-                    // Consumers of ConflictMarker should treat line number '0' as "unknown" in this context.
-                    const conflict = createConflictMarker(0, lineContent.trim(), markerType);
+                    // We use UNKNOWN_LINE_NUMBER to indicate that the line number is not applicable.
+                    // Consumers of ConflictMarker should treat this value as "unknown" in this context.
+                    const conflict = createConflictMarker(UNKNOWN_LINE_NUMBER, lineContent.trim(), markerType);
                     conflicts.push(conflict);
                 }
             }
