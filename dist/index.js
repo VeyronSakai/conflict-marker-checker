@@ -31426,7 +31426,7 @@ const createPullRequestRepository = (octokit, getFileContent) => {
                     if (retries >= maxRetries) {
                         throw new Error(`GitHub API request failed after ${maxRetries} retries: ${error}`);
                     }
-                    const waitTime = await getWaitTime(error);
+                    const waitTime = getWaitTime(error);
                     await wait(waitTime);
                     retries++;
                 }
