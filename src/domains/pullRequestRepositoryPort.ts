@@ -13,5 +13,5 @@ export type PullRequestRepositoryPort = {
   /**
    * Fetch list of files in the pull request
    */
-  fetchFiles(pullRequest: PullRequestData): Promise<File[]>
+  getFiles(pullRequest: PullRequestData): Promise<File[]>
 }

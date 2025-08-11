@@ -31364,93 +31364,6 @@ async function wait(milliseconds) {
 }
 
 /**
- * Pull request repository implementation using GitHub API
- */
-const createPullRequestRepository = (octokit, getFileContent) => {
-    return {
-        getCurrentPullRequest: () => {
-            const context = githubExports.context;
-            if (!context.payload.pull_request) {
-                throw new Error('This action can only be run on pull requests');
-            }
-            const { owner, repo } = context.repo;
-            const pullNumber = context.payload.pull_request.number;
-            const headSha = context.payload.pull_request.head.sha;
-            return createPullRequestData(owner, repo, pullNumber, headSha);
-        },
-        fetchFiles: async (pullRequest) => {
-            const allFiles = [];
-            let page = 1;
-            const perPage = 100;
-            let retries = 0;
-            const maxRetries = 3;
-            while (true) {
-                try {
-                    const response = await octokit.rest.pulls.listFiles({
-                        owner: pullRequest.owner,
-                        repo: pullRequest.repo,
-                        pull_number: pullRequest.pullNumber,
-                        per_page: perPage,
-                        page
-                    });
-                    // Rate limit check
-                    const remaining = parseInt(response.headers['x-ratelimit-remaining'] || '0');
-                    const reset = parseInt(response.headers['x-ratelimit-reset'] || '0');
-                    if (remaining < 100) {
-                        coreExports.warning(`Low API rate limit: ${remaining} requests remaining. Reset at ${new Date(reset * 1000).toISOString()}`);
-                    }
-                    // Convert to domain entities and detect conflicts
-                    for (const fileData of response.data) {
-                        const fileName = fileData.filename;
-                        const status = fileStatusFromString(fileData.status);
-                        const patch = fileData.patch;
-                        let conflicts = [];
-                        // Check conflicts - use patch if available, otherwise fetch full content
-                        if (patch) {
-                            // Use patch for small/medium files (patch is available)
-                            conflicts = detectConflictsInPatch(patch);
-                        }
-                        else if (getFileContent) {
-                            // For large files where patch is empty, fetch full content
-                            coreExports.info(`Patch not available for ${fileName}, fetching full content...`);
-                            const tempFile = createFile(fileName, status, patch);
-                            const content = await getFileContent(pullRequest, tempFile);
-                            if (content) {
-                                conflicts = detectConflictsInContent(content);
-                            }
-                            else {
-                                coreExports.warning(`Could not fetch content for ${fileName}`);
-                            }
-                        }
-                        const file = createFile(fileName, status, patch, conflicts);
-                        allFiles.push(file);
-                    }
-                    if (response.data.length < perPage) {
-                        break;
-                    }
-                    page++;
-                    coreExports.info(`Fetched ${allFiles.length} files so far...`);
-                    // Add delay to avoid rate limits
-                    if (page % 10 === 1 && page > 1) {
-                        coreExports.debug('Adding delay to avoid rate limits...');
-                        await wait(200);
-                    }
-                    retries = 0;
-                }
-                catch (error) {
-                    if (retries >= maxRetries) {
-                        throw new Error(`GitHub API request failed after ${maxRetries} retries: ${error}`);
-                    }
-                    const waitTime = await handleRateLimit(error);
-                    await wait(waitTime);
-                    retries++;
-                }
-            }
-            return allFiles;
-        }
-    };
-};
-/**
  * Check if a line contains a conflict marker
  */
 const isConflictMarker = (line) => {
@@ -31512,6 +31425,32 @@ const detectConflictsInContent = (content) => {
     }
     return conflicts;
 };
+/**
+ * Detect conflicts in a file using patch or full content
+ */
+const detectConflicts = async (fileName, status, patch, pullRequest, getFileContent) => {
+    // Check conflicts - use patch if available, otherwise fetch full content
+    if (patch) {
+        // Use patch for small/medium files (patch is available)
+        return detectConflictsInPatch(patch);
+    }
+    else if (getFileContent) {
+        // For large files where patch is empty, fetch full content
+        coreExports.info(`Patch not available for ${fileName}, fetching full content...`);
+        const tempFile = createFile(fileName, status, patch);
+        const content = await getFileContent(pullRequest, tempFile);
+        if (content) {
+            return detectConflictsInContent(content);
+        }
+        else {
+            coreExports.warning(`Could not fetch content for ${fileName}`);
+        }
+    }
+    return [];
+};
+/**
+ * Handle rate limit errors from GitHub API
+ */
 const handleRateLimit = async (error) => {
     if (error &&
         typeof error === 'object' &&
@@ -31535,6 +31474,76 @@ const handleRateLimit = async (error) => {
         return waitTime;
     }
     throw error;
+};
+/**
+ * Pull request repository implementation using GitHub API
+ */
+const createPullRequestRepository = (octokit, getFileContent) => {
+    return {
+        getCurrentPullRequest: () => {
+            const context = githubExports.context;
+            if (!context.payload.pull_request) {
+                throw new Error('This action can only be run on pull requests');
+            }
+            const { owner, repo } = context.repo;
+            const pullNumber = context.payload.pull_request.number;
+            const headSha = context.payload.pull_request.head.sha;
+            return createPullRequestData(owner, repo, pullNumber, headSha);
+        },
+        fetchFiles: async (pullRequest) => {
+            const allFiles = [];
+            let page = 1;
+            const perPage = 100;
+            let retries = 0;
+            const maxRetries = 3;
+            while (true) {
+                try {
+                    const response = await octokit.rest.pulls.listFiles({
+                        owner: pullRequest.owner,
+                        repo: pullRequest.repo,
+                        pull_number: pullRequest.pullNumber,
+                        per_page: perPage,
+                        page
+                    });
+                    // Rate limit check
+                    const remaining = parseInt(response.headers['x-ratelimit-remaining'] || '0');
+                    const reset = parseInt(response.headers['x-ratelimit-reset'] || '0');
+                    if (remaining < 100) {
+                        coreExports.warning(`Low API rate limit: ${remaining} requests remaining. Reset at ${new Date(reset * 1000).toISOString()}`);
+                    }
+                    // Convert to domain entities and detect conflicts
+                    for (const fileData of response.data) {
+                        const fileName = fileData.filename;
+                        const status = fileStatusFromString(fileData.status);
+                        const patch = fileData.patch;
+                        const conflicts = await detectConflicts(fileName, status, patch, pullRequest, getFileContent);
+                        const file = createFile(fileName, status, patch, conflicts);
+                        allFiles.push(file);
+                    }
+                    if (response.data.length < perPage) {
+                        break;
+                    }
+                    page++;
+                    coreExports.info(`Fetched ${allFiles.length} files so far...`);
+                    // Add delay to avoid rate limits
+                    if (page % 10 === 1 && page > 1) {
+                        coreExports.debug('Adding delay to avoid rate limits...');
+                        await wait(200);
+                    }
+                    retries = 0;
+                }
+                catch (error) {
+                    if (retries >= maxRetries) {
+                        throw new Error(`GitHub API request failed after ${maxRetries} retries: ${error}`);
+                    }
+                    const waitTime = await handleRateLimit(error);
+                    await wait(waitTime);
+                    retries++;
+                }
+            }
+            return allFiles;
+        }
+    };
 };
 
 const createFileContentRepository = (octokit) => ({

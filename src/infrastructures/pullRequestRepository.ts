@@ -6,7 +6,7 @@ import {
   createPullRequestData
 } from '../domains/pullRequestData.js'
 import { type File, createFile } from '../domains/file.js'
-import { fileStatusFromString } from '../domains/fileStatus.js'
+import { type FileStatus, fileStatusFromString } from '../domains/fileStatus.js'
 import {
   CONFLICT_MARKERS,
   type MarkerType,
@@ -40,7 +40,7 @@ export const createPullRequestRepository = (
       return createPullRequestData(owner, repo, pullNumber, headSha)
     },
 
-    fetchFiles: async (pullRequest: PullRequestData): Promise<File[]> => {
+    getFiles: async (pullRequest: PullRequestData): Promise<File[]> => {
       const allFiles: File[] = []
       let page = 1
       const perPage = 100
@@ -75,28 +75,15 @@ export const createPullRequestRepository = (
             const status = fileStatusFromString(fileData.status)
             const patch = fileData.patch
 
-            let conflicts: ConflictMarker[] = []
+            const conflictMarkers = await getConflictMarkers(
+              fileName,
+              status,
+              patch,
+              pullRequest,
+              getFileContent
+            )
 
-            // Check conflicts - use patch if available, otherwise fetch full content
-            if (patch) {
-              // Use patch for small/medium files (patch is available)
-              conflicts = detectConflictsInPatch(patch)
-            } else if (getFileContent) {
-              // For large files where patch is empty, fetch full content
-              core.info(
-                `Patch not available for ${fileName}, fetching full content...`
-              )
-              const tempFile = createFile(fileName, status, patch)
-              const content = await getFileContent(pullRequest, tempFile)
-
-              if (content) {
-                conflicts = detectConflictsInContent(content)
-              } else {
-                core.warning(`Could not fetch content for ${fileName}`)
-              }
-            }
-
-            const file = createFile(fileName, status, patch, conflicts)
+            const file = createFile(fileName, status, patch, conflictMarkers)
             allFiles.push(file)
           }
 
@@ -135,15 +122,15 @@ export const createPullRequestRepository = (
 /**
  * Check if a line contains a conflict marker
  */
-const isConflictMarker = (line: string): boolean => {
+const containsConflictMarker = (line: string): boolean => {
   const trimmedLine = line.trimStart()
   return CONFLICT_MARKERS.some((marker) => trimmedLine.startsWith(marker))
 }
 
 /**
- * Detect the type of conflict marker in a line
+ * Get the type of conflict marker in a line
  */
-const detectMarkerType = (line: string): MarkerType | null => {
+const getMarkerType = (line: string): MarkerType | null => {
   const trimmedLine = line.trimStart()
   for (const marker of CONFLICT_MARKERS) {
     if (trimmedLine.startsWith(marker)) {
@@ -154,9 +141,9 @@ const detectMarkerType = (line: string): MarkerType | null => {
 }
 
 /**
- * Detect conflict markers from patch content (only added lines)
+ * Get conflict markers from patch content (only added lines)
  */
-const detectConflictsInPatch = (patch: string): ConflictMarker[] => {
+const getConflictMarkersInPatch = (patch: string): ConflictMarker[] => {
   const lines = patch.split('\n')
   const conflicts: ConflictMarker[] = []
 
@@ -167,8 +154,8 @@ const detectConflictsInPatch = (patch: string): ConflictMarker[] => {
     if (line.startsWith('+') && !line.startsWith('+++')) {
       // Remove the '+' prefix and check for conflict markers
       const lineContent = line.substring(1)
-      if (isConflictMarker(lineContent)) {
-        const markerType = detectMarkerType(lineContent)
+      if (containsConflictMarker(lineContent)) {
+        const markerType = getMarkerType(lineContent)
         if (markerType) {
           // Note: line number is not meaningful in patch context
           const conflict = createConflictMarker(
@@ -186,26 +173,66 @@ const detectConflictsInPatch = (patch: string): ConflictMarker[] => {
 }
 
 /**
- * Detect conflict markers from file content
+ * Get conflict markers from file content
  */
-const detectConflictsInContent = (content: string): ConflictMarker[] => {
+const getConflictMarkersInContent = (content: string): ConflictMarker[] => {
   const lines = content.split('\n')
-  const conflicts: ConflictMarker[] = []
+  const conflictMarkers: ConflictMarker[] = []
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    if (isConflictMarker(line)) {
-      const markerType = detectMarkerType(line)
+    if (containsConflictMarker(line)) {
+      const markerType = getMarkerType(line)
       if (markerType) {
-        const conflict = createConflictMarker(i + 1, line.trim(), markerType)
-        conflicts.push(conflict)
+        const conflictMarker = createConflictMarker(
+          i + 1,
+          line.trim(),
+          markerType
+        )
+        conflictMarkers.push(conflictMarker)
       }
     }
   }
 
-  return conflicts
+  return conflictMarkers
 }
 
+/**
+ * Detect conflicts in a file using patch or full content
+ */
+const getConflictMarkers = async (
+  fileName: string,
+  status: FileStatus,
+  patch: string | undefined,
+  pullRequest: PullRequestData,
+  getFileContent?: (
+    pullRequest: PullRequestData,
+    file: File
+  ) => Promise<string | null>
+): Promise<ConflictMarker[]> => {
+  // Check conflicts - use patch if available, otherwise fetch full content
+  if (patch) {
+    // Use patch for small/medium files (patch is available)
+    return getConflictMarkersInPatch(patch)
+  } else if (getFileContent) {
+    // For large files where patch is empty, fetch full content
+    core.info(`Patch not available for ${fileName}, fetching full content...`)
+    const tempFile = createFile(fileName, status, patch)
+    const content = await getFileContent(pullRequest, tempFile)
+
+    if (content) {
+      return getConflictMarkersInContent(content)
+    } else {
+      core.warning(`Could not fetch content for ${fileName}`)
+    }
+  }
+
+  return []
+}
+
+/**
+ * Handle rate limit errors from GitHub API
+ */
 const handleRateLimit = async (error: unknown): Promise<number> => {
   if (
     error &&

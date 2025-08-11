@@ -22,7 +22,7 @@ export const checkPullRequestForConflicts = async (dependencies: {
     )
 
     // Fetch file list
-    const files = await pullRequestRepository.fetchFiles(pullRequest)
+    const files = await pullRequestRepository.getFiles(pullRequest)
     core.info(`Total files to check: ${files.length}`)
 
     // Check each file for conflicts
@@ -35,12 +35,12 @@ export const checkPullRequestForConflicts = async (dependencies: {
       }
 
       // Files already have conflicts detected by fetchFiles
-      if (file.hasConflicts()) {
+      if (file.hasConflictMarkers()) {
         const fileName = file.fileName
         conflictedFiles.push(fileName)
 
         // Log conflict details
-        for (const conflict of file.conflicts) {
+        for (const conflict of file.conflictMarkers) {
           core.error(
             `Conflict marker found in ${fileName}: ${conflict.content}`
           )

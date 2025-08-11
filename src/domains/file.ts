@@ -8,8 +8,8 @@ export type File = {
   readonly fileName: string
   readonly status: FileStatus
   readonly patch?: string
-  readonly conflicts: ConflictMarker[]
-  readonly hasConflicts: () => boolean
+  readonly conflictMarkers: ConflictMarker[]
+  readonly hasConflictMarkers: () => boolean
 }
 
 /**
@@ -19,11 +19,11 @@ export const createFile = (
   fileName: string,
   status: FileStatus,
   patch?: string,
-  conflicts: ConflictMarker[] = []
+  conflictMarkers: ConflictMarker[] = []
 ): File => ({
   fileName,
   status,
   patch,
-  conflicts,
-  hasConflicts: () => conflicts.length > 0
+  conflictMarkers: conflictMarkers,
+  hasConflictMarkers: () => conflictMarkers.length > 0
 })
