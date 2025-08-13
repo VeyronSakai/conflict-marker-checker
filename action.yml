@@ -1,6 +1,6 @@
 name: Conflict Marker Checker
 description: Check if PR files contain conflict markers
-author: VeyronSakai
+author: Yuki Sakai
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.
 branding:
