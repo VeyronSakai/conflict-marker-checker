@@ -108,7 +108,12 @@ jobs:
       - name: Update package.json
         run: |
           $packageJson = Get-Content -Path $env:PACKAGE_JSON_PATH -Raw | ConvertFrom-Json
-          $packageJson.version = $env:VERSION
+          # Remove 'v' prefix from VERSION if present
+          $version = $env:VERSION
+          if ($version.StartsWith('v')) {
+            $version = $version.Substring(1)
+          }
+          $packageJson.version = $version
           $packageJson | ConvertTo-Json -Depth 100 | Set-Content -Path $env:PACKAGE_JSON_PATH
       - name: Commit package.json
         uses: EndBug/add-and-commit@a94899bca583c204427a224a7af87c02f9b325d5
@@ -170,8 +175,13 @@ jobs:
         run: |
           $packageJson = Get-Content -Path $env:PACKAGE_JSON_PATH -Raw | ConvertFrom-Json
           $packageVersion = $packageJson.version
-          if ($packageVersion -ne $env:VERSION) {
-            Write-Error "version in package.json ($packageVersion) does not match the release draft tag ($env:VERSION)"
+          # Remove 'v' prefix from VERSION for comparison
+          $expectedVersion = $env:VERSION
+          if ($expectedVersion.StartsWith('v')) {
+            $expectedVersion = $expectedVersion.Substring(1)
+          }
+          if ($packageVersion -ne $expectedVersion) {
+            Write-Error "version in package.json ($packageVersion) does not match the release draft tag ($expectedVersion from $env:VERSION)"
             exit 1
           }
       - uses: release-drafter/release-drafter@b1476f6e6eb133afa41ed8589daba6dc69b4d3f5
@@ -182,13 +192,14 @@ jobs:
       - name: Get semver
         id: get-semver
         run: |
-          if ($env:VERSION -match '^(\d+)\.(\d+)\.(\d+)') {
+          # Handle versions with or without 'v' prefix
+          if ($env:VERSION -match '^v?(\d+)\.(\d+)\.(\d+)') {
             $major = $matches[1]
             $minor = $matches[2]
             $patch = $matches[3]
-            "major=$major" | Add-Content -Path $env:GITHUB_OUTPUT
-            "minor=$major.$minor" | Add-Content -Path $env:GITHUB_OUTPUT
-            "patch=$major.$minor.$patch" | Add-Content -Path $env:GITHUB_OUTPUT
+            "major=v$major" | Add-Content -Path $env:GITHUB_OUTPUT
+            "minor=v$major.$minor" | Add-Content -Path $env:GITHUB_OUTPUT
+            "patch=v$major.$minor.$patch" | Add-Content -Path $env:GITHUB_OUTPUT
           } else {
             Write-Error "Unable to parse version: $env:VERSION"
             exit 1
@@ -197,14 +208,14 @@ jobs:
         with:
           ref: ${{ env.VERSION }}
       - name: Update major tag
-        if: ${{ steps.get-semver.outputs.major != '0' }}
+        if: ${{ steps.get-semver.outputs.major != 'v0' }}
         env:
           MAJOR_TAG: ${{ steps.get-semver.outputs.major }}
         run: |
           $refspec = "refs/tags/${env:VERSION}:refs/tags/${env:MAJOR_TAG}"
           git push -f origin $refspec
       - name: Update minor tag
-        if: ${{ steps.get-semver.outputs.minor != '0.0' }}
+        if: ${{ steps.get-semver.outputs.minor != 'v0.0' }}
         env:
           MINOR_TAG: ${{ steps.get-semver.outputs.minor }}
         run: |
