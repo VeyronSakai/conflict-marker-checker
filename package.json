@@ -1,7 +1,7 @@
 {
   "name": "conflict-marker-checker",
   "description": "A GitHub Action to check for conflict markers in files",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": "Yuki Sakai",
   "type": "module",
   "private": true,
