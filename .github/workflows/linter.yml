@@ -43,7 +43,7 @@ jobs:
 
       - name: Lint Codebase
         id: super-linter
-        uses: super-linter/super-linter/slim@7bba2eeb89d01dc9bfd93c497477a57e72c83240 # v7
+        uses: super-linter/super-linter/slim@7bba2eeb89d01dc9bfd93c497477a57e72c83240 # v8.2.0
         env:
           DEFAULT_BRANCH: main
           FILTER_REGEX_EXCLUDE: dist/**/*|CLAUDE.md|__tests__/**/*
@@ -57,3 +57,5 @@ jobs:
           VALIDATE_JSON: false
           VALIDATE_TYPESCRIPT_STANDARD: false
           VALIDATE_GITHUB_ACTIONS_ZIZMOR: false
+          VALIDATE_JAVASCRIPT_BIOME: false
+          VALIDATE_TYPESCRIPT_BIOME: false
