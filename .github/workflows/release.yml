@@ -41,8 +41,7 @@ jobs:
   check-version:
     name: Check Version
     needs: paths-filter
-    if:
-      ${{ github.event_name == 'pull_request' &&
+    if: ${{ github.event_name == 'pull_request' &&
       needs.paths-filter.outputs.package_json == 'true' }}
     runs-on: ubuntu-latest
     permissions:
@@ -79,8 +78,7 @@ jobs:
 
   update-draft:
     name: Update Draft
-    if:
-      ${{ (github.event_name == 'pull_request' &&
+    if: ${{ (github.event_name == 'pull_request' &&
       github.event.pull_request.base.ref == 'main') || github.event_name ==
       'workflow_dispatch' }}
     runs-on: ubuntu-latest
@@ -151,8 +149,7 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: Create pull request and merge
-        if:
-          ${{ steps.commit-package-json.outputs.committed == 'true' ||
+        if: ${{ steps.commit-package-json.outputs.committed == 'true' ||
           steps.commit-readme.outputs.committed == 'true'}}
         env:
           GH_TOKEN: ${{ steps.create-github-app-token.outputs.token }}
@@ -170,8 +167,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow }}
       cancel-in-progress: false
-    if:
-      ${{ github.event_name == 'pull_request' &&
+    if: ${{ github.event_name == 'pull_request' &&
       github.event.pull_request.base.ref == 'main' &&
       github.event.pull_request.merged &&
       needs.paths-filter.outputs.package_json == 'true' &&

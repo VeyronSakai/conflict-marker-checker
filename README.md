@@ -1,6 +1,7 @@
 # Conflict Marker Checker
 
-> [!CAUTION] This Action had an issue where conflict markers could not be
+> [!CAUTION]
+> This Action had an issue where conflict markers could not be
 > detected accurately when the PR contained a large number of file differences.
 > This issue was unavoidable due to the concept of this Action, so it has been
 > archived.
