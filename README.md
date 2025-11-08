@@ -1,8 +1,9 @@
 # Conflict Marker Checker
 
-> [!CAUTION]
-> This Action had an issue where conflict markers could not be detected accurately when the PR contained a large number of file differences.
-> This issue was unavoidable due to the concept of this Action, so it has been archived.
+> [!CAUTION] This Action had an issue where conflict markers could not be
+> detected accurately when the PR contained a large number of file differences.
+> This issue was unavoidable due to the concept of this Action, so it has been
+> archived.
 
 [![GitHub Super-Linter](https://github.com/VeyronSakai/conflict-marker-checker/actions/workflows/linter.yml/badge.svg)](https://github.com/super-linter/super-linter)
 ![CI](https://github.com/VeyronSakai/conflict-marker-checker/actions/workflows/ci.yml/badge.svg)
